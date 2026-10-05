@@ -4,12 +4,18 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-A **Mixed-Integer Linear Program (MILP)** that finds the revenue-maximising
-charge / discharge schedule for a grid-connected Battery Energy Storage System
-(BESS) given hourly day-ahead electricity prices.
+A Python toolkit for BESS revenue optimisation combining two components:
 
-Built with [Pyomo](http://www.pyomo.org/) and solved with the open-source
-[HiGHS](https://highs.dev/) solver (falls back to CBC).
+- **MILP dispatch optimizer** — finds the revenue-maximising charge / discharge
+  schedule for a grid-connected Battery Energy Storage System (BESS) given
+  hourly day-ahead electricity prices. Built with
+  [Pyomo](http://www.pyomo.org/) and solved with
+  [HiGHS](https://highs.dev/) (falls back to CBC).
+
+- **24h-ahead price forecaster** — gradient-boosted regression trees
+  (scikit-learn) with cyclic calendar features, lagged prices, and 80%
+  prediction intervals. Feeds directly into the MILP to produce a realistic
+  forecast-driven dispatch schedule.
 
 ---
 
@@ -60,6 +66,8 @@ Built with [Pyomo](http://www.pyomo.org/) and solved with the open-source
 | **Round-trip efficiency** | Symmetric √η split across charge and discharge legs |
 | **Terminal SoC constraint** | Prevents end-of-year drain exploitation |
 | **Custom price data** | Pass any hourly CSV / Excel price series; falls back to bundled 2023 DE data |
+| **Price forecaster** | GBM with cyclic calendar encoding, lagged prices, and 80% prediction intervals |
+| **Forecast-driven dispatch** | Run the MILP on forecast prices; evaluate revenue against actuals for regret analysis |
 
 ---
 
@@ -207,6 +215,27 @@ Evaluated on 2023 German ENTSO-E prices (Sep–Dec hold-out):
 
 **Returns** a dict with keys `status`, `annual_revenue_eur`, `optimal_capacity_mwh`,
 `optimal_power_mw`, `schedule` (hourly arrays), and `kpis` (summary dict).
+
+### `train_price_forecaster(prices, train_end_h, n_estimators) → tuple`
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `prices` | `np.ndarray` | — | Full hourly price array (8,760 values) |
+| `train_end_h` | `int` | — | Exclusive end hour for training data |
+| `n_estimators` | `int` | `250` | Number of GBM boosting rounds per model |
+
+**Returns** `(model_p50, model_p10, model_p90)` — three fitted scikit-learn estimators.
+
+### `forecast_prices(models, prices, start_h, end_h) → tuple`
+
+| Parameter | Type | Description |
+|---|---|---|
+| `models` | `tuple` | Output of `train_price_forecaster` |
+| `prices` | `np.ndarray` | Full price array (used for lag features only — no look-ahead) |
+| `start_h` | `int` | First hour to forecast |
+| `end_h` | `int` | Exclusive end hour |
+
+**Returns** `(point, lower, upper)` — median, 10th-percentile, and 90th-percentile forecasts as `np.ndarray`.
 
 ---
 
