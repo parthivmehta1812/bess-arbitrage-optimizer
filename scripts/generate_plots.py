@@ -20,7 +20,7 @@ sys.path.insert(0, str(ROOT / "src"))
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from bess_arbitrage import optimize_bess_arbitrage
+from bess_arbitrage import optimize_bess_arbitrage, optimize_peak_shaving, make_industrial_load
 
 OUT_DIR = ROOT / "docs" / "images"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -572,7 +572,227 @@ with open(ROOT / "docs" / "results_table.md", "w") as f:
     f.write(table_md)
 print(f"Saved: docs/results_table.md")
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Plot 7 — Peak shaving: industrial load with / without BESS
+# Shows a 1-week window where the BESS clips demand peaks to reduce
+# demand charges — the core FION use case.
+# ─────────────────────────────────────────────────────────────────────────────
+print("\nGenerating synthetic industrial load + running peak-shaving MILP...")
+load_profile = make_industrial_load(peak_mw=2.2, base_mw=0.4)
+
+ps_result = optimize_peak_shaving(
+    load_profile         = load_profile,
+    battery_capacity_mwh = 8.0,
+    max_power_mw         = 2.0,
+    efficiency           = 0.92,
+    initial_soc          = 0.5,
+)
+
+ps_sched      = ps_result["schedule"]
+load_arr      = np.array(ps_sched["Load_MW"])
+grid_arr      = np.array(ps_sched["GridImport_MW"])
+ps_charge     = np.array(ps_sched["Charge_MW"])
+ps_discharge  = np.array(ps_sched["Discharge_MW"])
+ps_soc        = np.array(ps_sched["SoC_MWh"])
+
+peak_wo = ps_result["peak_without_mw"]
+peak_wi = ps_result["peak_with_mw"]
+red_pct = ps_result["peak_reduction_pct"]
+
+# Show the first week (168 h) — captures full weekday + weekend cycle
+W = 168
+hw7 = list(range(W))
+
+fig7 = make_subplots(
+    rows=2, cols=1,
+    subplot_titles=(
+        f"Industrial demand vs grid import  —  Week 1  "
+        f"(peak reduced {peak_wo:.2f} → {peak_wi:.2f} MW,  −{red_pct:.1f}%)",
+        "Battery SoC during peak shaving",
+    ),
+    vertical_spacing=0.18,
+    row_heights=[0.65, 0.35],
+)
+
+# Top: load, grid import, peak line
+fig7.add_trace(go.Scatter(
+    name="Industrial load",
+    x=hw7, y=load_arr[:W].tolist(),
+    mode="lines", line=dict(color=C["gray500"], width=1.5, dash="dot"),
+), row=1, col=1)
+
+fig7.add_trace(go.Scatter(
+    name="Grid import (with BESS)",
+    x=hw7, y=grid_arr[:W].tolist(),
+    mode="lines", line=dict(color=C["brand"], width=2),
+    fill="tozeroy", fillcolor=C["brandLighter"] + "44",
+), row=1, col=1)
+
+fig7.add_trace(go.Scatter(
+    name=f"Peak without BESS ({peak_wo:.2f} MW)",
+    x=hw7, y=[peak_wo] * W,
+    mode="lines", line=dict(color=C["error"], width=1.5, dash="dash"),
+), row=1, col=1)
+
+fig7.add_trace(go.Scatter(
+    name=f"Peak with BESS ({peak_wi:.2f} MW)",
+    x=hw7, y=[peak_wi] * W,
+    mode="lines", line=dict(color=C["success"], width=1.5, dash="dash"),
+), row=1, col=1)
+
+# Bottom: SoC
+fig7.add_trace(go.Scatter(
+    name="Battery SoC",
+    x=hw7, y=ps_soc[:W].tolist(),
+    mode="lines", line=dict(color=C["brand"], width=2),
+    fill="tozeroy", fillcolor=C["brandLighter"] + "55",
+    showlegend=False,
+), row=2, col=1)
+
+fig7.update_layout(
+    paper_bgcolor=C["white"], plot_bgcolor=C["plotBg"],
+    font=dict(family="Inter, Arial, sans-serif", size=12, color=C["gray600"]),
+    title=dict(
+        text=f"Peak Shaving — BESS cuts demand peak by {red_pct:.1f}% ({peak_wo:.2f} → {peak_wi:.2f} MW)",
+        font=dict(size=13, color=C["gray900"]), x=0.01,
+    ),
+    legend=dict(bgcolor="rgba(255,255,255,0.9)", bordercolor=C["gray200"], borderwidth=1),
+    margin=dict(t=70, r=60, b=55, l=70),
+    height=620, width=1200,
+)
+fig7.update_xaxes(gridcolor=C["gray200"], linecolor=C["gray200"], zerolinecolor=C["gray200"])
+fig7.update_yaxes(gridcolor=C["gray200"], linecolor=C["gray200"], zerolinecolor=C["gray200"])
+fig7.update_xaxes(title_text="Hour of week", row=2, col=1)
+fig7.update_yaxes(title_text="Power (MW)", row=1, col=1)
+fig7.update_yaxes(title_text="SoC (MWh)", row=2, col=1)
+
+path7 = OUT_DIR / "peak_shaving.png"
+fig7.write_image(str(path7), format="png", width=1200, height=620, scale=2)
+print(f"Saved: {path7}")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Plot 8 — Forecast calibration: reliability diagram + CRPS
+# Shows whether the p10/p90 quantile forecasts are well-calibrated —
+# i.e., 10% of actuals fall below the p10 band, 90% below the p90 band.
+# ─────────────────────────────────────────────────────────────────────────────
+print("\nComputing forecast calibration metrics...")
+
+# Use the already-computed forecast arrays from Plot 6
+alphas    = [0.10, 0.50, 0.90]
+quantiles = [fc_lower, fc_point, fc_upper]
+empirical = [float(np.mean(actual_test[:len(q)] <= q)) for q in quantiles]
+
+# Pinball loss per quantile (= proper scoring rule component)
+def pinball(alpha, y, q):
+    return np.where(y >= q, alpha * (y - q), (1 - alpha) * (q - y)).mean()
+
+pinball_scores = [pinball(a, actual_test[:len(q)], q) for a, q in zip(alphas, quantiles)]
+
+# CRPS approximation: mean of pinball losses across quantiles (× 2 by convention)
+crps = float(2 * np.mean(pinball_scores))
+
+# Reliability: expected vs empirical coverage at p10 and p90
+cov_10 = float(np.mean(actual_test <= fc_lower))
+cov_90 = float(np.mean(actual_test <= fc_upper))
+
+print(f"[calibration] Expected p10 coverage: 10.0%  |  Empirical: {cov_10*100:.1f}%")
+print(f"[calibration] Expected p90 coverage: 90.0%  |  Empirical: {cov_90*100:.1f}%")
+print(f"[calibration] CRPS: {crps:.2f} €/MWh")
+
+# Build reliability diagram with fine-grained quantile sweep
+n_quantiles = 19
+alphas_fine = np.linspace(0.05, 0.95, n_quantiles)
+
+# Interpolate quantile forecasts from p10/p50/p90 using linear interp
+from scipy.interpolate import interp1d
+q_vals  = np.array([0.10, 0.50, 0.90])
+q_preds = np.stack([fc_lower, fc_point, fc_upper], axis=1)  # (N, 3)
+
+empirical_fine = []
+for alpha in alphas_fine:
+    # For each hour, interpolate the alpha-quantile forecast
+    q_alpha = np.array([
+        float(interp1d(q_vals, q_preds[i], fill_value="extrapolate")(alpha))
+        for i in range(len(q_preds))
+    ])
+    empirical_fine.append(float(np.mean(actual_test[:len(q_alpha)] <= q_alpha)))
+
+fig8 = make_subplots(
+    rows=1, cols=2,
+    subplot_titles=(
+        f"Reliability diagram  (CRPS = {crps:.1f} €/MWh)",
+        "Pinball loss by quantile",
+    ),
+    horizontal_spacing=0.12,
+)
+
+# Perfect calibration diagonal
+diag = alphas_fine.tolist()
+fig8.add_trace(go.Scatter(
+    name="Perfect calibration",
+    x=diag, y=diag,
+    mode="lines", line=dict(color=C["gray500"], dash="dash", width=1.5),
+), row=1, col=1)
+
+fig8.add_trace(go.Scatter(
+    name="GBM forecaster",
+    x=alphas_fine.tolist(), y=empirical_fine,
+    mode="lines+markers",
+    line=dict(color=C["brand"], width=2),
+    marker=dict(size=5, color=C["brand"]),
+), row=1, col=1)
+
+# Shade deviation from perfect calibration
+fig8.add_trace(go.Scatter(
+    name="Calibration gap",
+    x=alphas_fine.tolist() + alphas_fine.tolist()[::-1],
+    y=empirical_fine + diag[::-1],
+    fill="toself", fillcolor=C["brandLighter"] + "55",
+    line=dict(color="rgba(0,0,0,0)"), showlegend=True,
+), row=1, col=1)
+
+# Pinball loss bars
+alpha_labels = [f"p{int(a*100)}" for a in alphas]
+fig8.add_trace(go.Bar(
+    name="Pinball loss",
+    x=alpha_labels,
+    y=pinball_scores,
+    marker=dict(color=[C["brandLight"], C["brand"], C["brandDeep"]], opacity=0.9),
+    text=[f"{v:.1f}" for v in pinball_scores],
+    textposition="outside",
+    textfont=dict(size=11, color=C["gray600"]),
+    showlegend=False,
+), row=1, col=2)
+
+fig8.update_layout(
+    paper_bgcolor=C["white"], plot_bgcolor=C["plotBg"],
+    font=dict(family="Inter, Arial, sans-serif", size=12, color=C["gray600"]),
+    title=dict(
+        text=(
+            f"Forecast Calibration — p10 coverage {cov_10*100:.1f}% (target 10%) · "
+            f"p90 coverage {cov_90*100:.1f}% (target 90%) · CRPS {crps:.1f} €/MWh"
+        ),
+        font=dict(size=12, color=C["gray900"]), x=0.01,
+    ),
+    legend=dict(bgcolor="rgba(255,255,255,0.9)", bordercolor=C["gray200"], borderwidth=1),
+    margin=dict(t=70, r=40, b=55, l=70),
+    height=420, width=1200,
+)
+fig8.update_xaxes(gridcolor=C["gray200"], linecolor=C["gray200"], zerolinecolor=C["gray200"])
+fig8.update_yaxes(gridcolor=C["gray200"], linecolor=C["gray200"], zerolinecolor=C["gray200"])
+fig8.update_xaxes(title_text="Predicted quantile", row=1, col=1)
+fig8.update_yaxes(title_text="Empirical coverage", row=1, col=1)
+fig8.update_xaxes(title_text="Quantile", row=1, col=2)
+fig8.update_yaxes(title_text="Pinball loss (€/MWh)", row=1, col=2)
+
+path8 = OUT_DIR / "forecast_calibration.png"
+fig8.write_image(str(path8), format="png", width=1200, height=420, scale=2)
+print(f"Saved: {path8}")
+
+# ─────────────────────────────────────────────────────────────────────────────
 print(f"\nAll plots saved to docs/images/")
 print(f"Annual revenue (real MILP): €{result['annual_revenue_eur']:,.0f}")
 print(f"RFNBO penalty:              €{penalty:,.0f} ({penalty_pct:.1f}%)")
 print(f"Peak revenue week:          week {best_week + 1}  (€{weekly_rev[best_week]:,.0f})")
+print(f"Peak shaving reduction:     {red_pct:.1f}%  ({peak_wo:.2f} → {peak_wi:.2f} MW)")
+print(f"Forecast CRPS:              {crps:.2f} €/MWh  |  p90 coverage: {cov_90*100:.1f}%")

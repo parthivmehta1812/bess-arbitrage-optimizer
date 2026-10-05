@@ -49,6 +49,53 @@ except ImportError:
 from .loader import load_prices
 
 
+def make_industrial_load(
+    peak_mw: float = 2.2,
+    base_mw: float = 0.4,
+    seed: int = 42,
+) -> np.ndarray:
+    """
+    Generate a synthetic 8,760-hour industrial electricity demand profile.
+
+    Mimics a typical manufacturing facility with:
+    - Day/night and weekday/weekend patterns
+    - Afternoon demand peaks (shift changeover)
+    - Gaussian noise for realistic variability
+
+    Parameters
+    ----------
+    peak_mw : float
+        Maximum demand during production hours [MW].
+    base_mw : float
+        Baseline overnight demand (HVAC, lighting, standby) [MW].
+    seed : int
+        Random seed for reproducibility.
+
+    Returns
+    -------
+    np.ndarray of shape (8760,), units MW.
+    """
+    rng = np.random.default_rng(seed)
+    # Hourly shape factor for a weekday (0 = midnight, 23 = 11pm)
+    weekday_shape = np.array([
+        0.22, 0.20, 0.19, 0.19, 0.20, 0.30,   # 0–5   night / pre-dawn
+        0.55, 0.82, 0.95, 0.98, 1.00, 0.97,   # 6–11  morning ramp + full production
+        0.90, 0.93, 0.96, 1.00, 0.98, 0.92,   # 12–17 afternoon peak
+        0.75, 0.60, 0.45, 0.35, 0.28, 0.24,   # 18–23 wind-down
+    ])
+    weekend_shape = weekday_shape * 0.40       # skeleton crew on weekends
+
+    profile = np.empty(8760)
+    for h in range(8760):
+        dow = (h // 24) % 7
+        hod = h % 24
+        shape = weekday_shape[hod] if dow < 5 else weekend_shape[hod]
+        noise = rng.normal(0, 0.03)
+        profile[h] = np.clip(base_mw + (peak_mw - base_mw) * shape + noise, base_mw * 0.8, peak_mw * 1.05)
+
+    return profile
+
+
 def optimize_bess_arbitrage(
     price_bytes: bytes | None = None,
     battery_capacity_mwh: float = 8.0,
@@ -300,5 +347,133 @@ def optimize_bess_arbitrage(
             ),
             "rfnbo_compliant": bool(rfnbo_compliant),
             "solver_status":   status,
+        },
+    }
+
+
+def optimize_peak_shaving(
+    load_profile: np.ndarray,
+    battery_capacity_mwh: float = 8.0,
+    max_power_mw: float = 2.0,
+    efficiency: float = 0.92,
+    initial_soc: float = 0.5,
+) -> dict:
+    """
+    MILP peak-shaving: minimise the maximum grid import across the year.
+
+    Given an industrial load profile, the battery discharges during demand
+    peaks to cut the highest grid import and reduce demand charges.
+
+    Objective
+    ---------
+    Minimise  ``peak``  subject to  ``peak >= load[t] + charge[t] - discharge[t]``
+    for all hours t.
+
+    Parameters
+    ----------
+    load_profile : np.ndarray
+        Hourly electricity demand [MW], shape (T,).
+    battery_capacity_mwh : float
+        Battery energy capacity [MWh].
+    max_power_mw : float
+        Maximum charge / discharge rate [MW].
+    efficiency : float
+        Round-trip efficiency (0–1).
+    initial_soc : float
+        Initial SoC as a fraction of capacity.
+
+    Returns
+    -------
+    dict with keys:
+        status          : solver termination condition
+        peak_without_mw : maximum grid import without BESS [MW]
+        peak_with_mw    : optimised maximum grid import with BESS [MW]
+        peak_reduction_pct : percentage reduction in peak demand
+        schedule        : dict of hourly arrays (Load_MW, GridImport_MW,
+                          Charge_MW, Discharge_MW, SoC_MWh)
+    """
+    if not _PYOMO_OK:
+        raise ImportError("Pyomo is not installed. Install with: pip install pyomo highspy")
+
+    T        = len(load_profile)
+    sqrt_eff = math.sqrt(efficiency)
+    cap      = battery_capacity_mwh
+    power    = max_power_mw
+
+    print(
+        f"[peak_shaving] Building MILP | T={T} h | cap={cap} MWh | "
+        f"p_max={power} MW | eff={efficiency}"
+    )
+
+    m   = ConcreteModel()
+    m.T = Set(initialize=range(T))
+
+    m.charge      = Var(m.T, domain=NonNegativeReals, bounds=(0, power))
+    m.discharge   = Var(m.T, domain=NonNegativeReals, bounds=(0, power))
+    m.soc         = Var(m.T, domain=NonNegativeReals, bounds=(0, cap))
+    m.is_charging = Var(m.T, domain=Binary)
+    m.peak        = Var(domain=NonNegativeReals)   # the peak grid import we minimise
+
+    from pyomo.environ import minimize
+    m.obj = Objective(expr=m.peak, sense=minimize)
+
+    # Peak must be >= net grid import at every hour
+    def _peak_floor(m, t):
+        return m.peak >= load_profile[t] + m.charge[t] - m.discharge[t]
+    m.peak_floor = Constraint(m.T, rule=_peak_floor)
+
+    # SoC dynamics
+    def _soc_dynamics(m, t):
+        if t == 0:
+            return m.soc[0] == initial_soc * cap
+        return m.soc[t] == m.soc[t - 1] + m.charge[t - 1] * sqrt_eff - m.discharge[t - 1] / sqrt_eff
+    m.soc_dynamics = Constraint(m.T, rule=_soc_dynamics)
+
+    # Terminal SoC >= 50% (prevent end-of-year drain)
+    m.soc_terminal = Constraint(rule=lambda m: m.soc[T - 1] >= 0.5 * cap)
+
+    # Mutex: no simultaneous charge + discharge
+    big_m = power * 2
+    m.mutex_charge    = Constraint(m.T, rule=lambda m, t: m.charge[t]    <= big_m * m.is_charging[t])
+    m.mutex_discharge = Constraint(m.T, rule=lambda m, t: m.discharge[t] <= big_m * (1 - m.is_charging[t]))
+
+    # Solve
+    solver = SolverFactory("highs")
+    if not solver.available():
+        solver = SolverFactory("cbc")
+        print("[peak_shaving] HiGHS not found — falling back to CBC")
+    else:
+        print("[peak_shaving] Solver: HiGHS")
+
+    print("[peak_shaving] Solving MILP …")
+    res    = solver.solve(m, tee=False, options={"time_limit": 120})
+    status = str(res.solver.termination_condition)
+    print(f"[peak_shaving] Status: {status}")
+
+    charge_arr    = np.clip([value(m.charge[t])    for t in range(T)], 0, power)
+    discharge_arr = np.clip([value(m.discharge[t]) for t in range(T)], 0, power)
+    soc_arr       = np.clip([value(m.soc[t])       for t in range(T)], 0, cap)
+    grid_import   = load_profile + np.asarray(charge_arr) - np.asarray(discharge_arr)
+
+    peak_without = float(load_profile.max())
+    peak_with    = float(grid_import.max())
+    reduction    = (peak_without - peak_with) / peak_without * 100
+
+    print(
+        f"[peak_shaving] Peak without BESS: {peak_without:.2f} MW | "
+        f"With BESS: {peak_with:.2f} MW | Reduction: {reduction:.1f}%"
+    )
+
+    return {
+        "status":              status,
+        "peak_without_mw":     round(peak_without, 3),
+        "peak_with_mw":        round(peak_with, 3),
+        "peak_reduction_pct":  round(reduction, 1),
+        "schedule": {
+            "Load_MW":       load_profile.tolist(),
+            "GridImport_MW": grid_import.tolist(),
+            "Charge_MW":     charge_arr,
+            "Discharge_MW":  discharge_arr,
+            "SoC_MWh":       soc_arr,
         },
     }
