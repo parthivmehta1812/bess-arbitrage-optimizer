@@ -26,7 +26,6 @@ a physically realistic battery duration (default 2–4 h).
 from __future__ import annotations
 
 import math
-from typing import Optional
 
 import numpy as np
 
@@ -51,7 +50,7 @@ from .loader import load_prices
 
 
 def optimize_bess_arbitrage(
-    price_bytes: Optional[bytes] = None,
+    price_bytes: bytes | None = None,
     battery_capacity_mwh: float = 8.0,
     max_power_mw: float = 2.0,
     efficiency: float = 0.92,

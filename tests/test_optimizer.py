@@ -7,11 +7,12 @@ Tests use a tiny synthetic price series to keep solve times under a second.
 from __future__ import annotations
 
 import math
+
 import numpy as np
 import pytest
 
 from bess_arbitrage.loader import load_prices
-from bess_arbitrage.optimizer import optimize_bess_arbitrage, _PYOMO_OK
+from bess_arbitrage.optimizer import _PYOMO_OK, optimize_bess_arbitrage
 
 # Skip all solver-dependent tests if Pyomo / HiGHS are not installed
 requires_solver = pytest.mark.skipif(
@@ -23,8 +24,8 @@ requires_solver = pytest.mark.skipif(
 
 def _make_price_csv(pattern: str = "alternating") -> bytes:
     """Return a minimal CSV with 8760 hourly prices."""
-    import io
     import csv
+    import io
 
     if pattern == "alternating":
         # Simple 2-value cycle: cheap hour then expensive hour
@@ -59,7 +60,8 @@ class TestLoader:
         assert np.allclose(prices, 50.0)
 
     def test_short_file_is_padded(self):
-        import io, csv
+        import csv
+        import io
         buf = io.StringIO()
         writer = csv.writer(buf)
         writer.writerow(["price"])

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import io
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -19,7 +18,7 @@ _SAMPLE_DATA_PATH = Path(__file__).parent.parent.parent / "data" / "sample_de_20
 HOURS_PER_YEAR = 8760
 
 
-def load_prices(price_bytes: Optional[bytes] = None) -> np.ndarray:
+def load_prices(price_bytes: bytes | None = None) -> np.ndarray:
     """
     Load hourly electricity prices and return a numpy array of length 8760.
 
