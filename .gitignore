@@ -42,3 +42,7 @@ Thumbs.db
 
 # Local price data (may be large / proprietary)
 data/*.csv
+
+# Generated artifacts (produced by scripts/generate_plots.py)
+docs/kpis.json
+docs/results_table.md
