@@ -57,7 +57,7 @@ Built with [Pyomo](http://www.pyomo.org/) and solved with the open-source
 | **RFNBO compliance gate** | Block charging at prices > 20 EUR/MWh (additionality proxy) |
 | **Round-trip efficiency** | Symmetric √η split across charge and discharge legs |
 | **Terminal SoC constraint** | Prevents end-of-year drain exploitation |
-| **Custom price data** | Pass any hourly CSV / Excel price series; falls back to bundled 2024 DE data |
+| **Custom price data** | Pass any hourly CSV / Excel price series; falls back to bundled 2023 DE data |
 
 ---
 
@@ -104,7 +104,7 @@ charge[t] = 0  if  λ_t > 20 EUR/MWh                                (RFNBO gate)
 ## Installation
 
 ```bash
-git clone https://github.com/Parthiv18122000/bess-arbitrage-optimizer.git
+git clone https://github.com/parthivmehta1812/bess-arbitrage-optimizer.git
 cd bess-arbitrage-optimizer
 pip install -e ".[dev]"
 ```
@@ -188,8 +188,7 @@ pytest tests/ -v --cov=bess_arbitrage
 
 ## Price data
 
-A bundled 2024 German ENTSO-E subset is included for testing.  For full
-annual runs, download your own data from
+A bundled 2023 German ENTSO-E dataset is included (8,760 hourly values, min −129.8, max +583.4 EUR/MWh).  For other years or markets, download data from
 [ENTSO-E Transparency Platform](https://transparency.entsoe.eu/) and pass
 it via `price_bytes`.  See [`data/README.md`](data/README.md) for details.
 
