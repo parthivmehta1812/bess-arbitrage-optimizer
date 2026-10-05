@@ -313,6 +313,91 @@ path4 = OUT_DIR / "rfnbo_analysis.png"
 fig4.write_image(str(path4), **PNG_OPTS)
 print(f"Saved: {path4}")
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Plot 5 — Peak-Revenue Week: Dispatch vs Price vs SoC (combined chart)
+# ─────────────────────────────────────────────────────────────────────────────
+import numpy as np
+
+rev_arr    = np.array(revenue_eur)
+charge_arr = np.array(charge_mw)
+disch_arr  = np.array(discharge_mw)
+soc_arr    = np.array(soc_mwh)
+price_arr  = np.array(prices)
+
+# Find the week (168 h window) with highest total revenue
+weekly_rev = [rev_arr[i*168:(i+1)*168].sum() for i in range(52)]
+best_week  = int(np.argmax(weekly_rev))
+s = best_week * 168
+e = s + 168
+hw = list(range(168))   # hour-of-week x-axis
+
+soc_pct = (soc_arr[s:e] / cap_mwh * 100).tolist()
+
+fig5 = make_subplots(specs=[[{"secondary_y": True}]])
+
+# Teal bars — Charge (buy), positive
+fig5.add_trace(go.Bar(
+    name   = "Charge (buy)",
+    x      = hw,
+    y      = charge_arr[s:e].tolist(),
+    marker = dict(color="#2DD4BF", opacity=0.9),
+    yaxis  = "y",
+), secondary_y=False)
+
+# Orange bars — Discharge (sell), negative
+fig5.add_trace(go.Bar(
+    name   = "Discharge (sell)",
+    x      = hw,
+    y      = (-disch_arr[s:e]).tolist(),
+    marker = dict(color="#F97316", opacity=0.9),
+    yaxis  = "y",
+), secondary_y=False)
+
+# Red solid line — Price
+fig5.add_trace(go.Scatter(
+    name = "Price (€/MWh)",
+    x    = hw,
+    y    = price_arr[s:e].tolist(),
+    mode = "lines",
+    line = dict(color="#EF4444", width=1.5),
+), secondary_y=True)
+
+# Blue dashed line — SoC %
+fig5.add_trace(go.Scatter(
+    name = "SoC (%)",
+    x    = hw,
+    y    = soc_pct,
+    mode = "lines",
+    line = dict(color="#3B82F6", width=1.5, dash="dash"),
+), secondary_y=True)
+
+fig5.update_layout(base_layout(
+    title   = dict(
+        text=f"Peak-Revenue Week (week {best_week + 1}) — Dispatch vs Price vs SoC",
+        font=dict(size=14, color=C["gray900"]), x=0.01,
+    ),
+    barmode = "relative",
+    xaxis   = dict(**AXIS_STYLE, title=dict(text="Hour of week")),
+    yaxis   = dict(**AXIS_STYLE, title=dict(text="Power (MW)  [+ charge / − discharge]")),
+    yaxis2  = dict(
+        **AXIS_STYLE,
+        title=dict(text="Grid Price (€/MWh)  /  SoC (%)"),
+        overlaying="y", side="right", showgrid=False,
+    ),
+    legend  = dict(
+        bgcolor="rgba(255,255,255,0.9)", bordercolor=C["gray200"], borderwidth=1,
+        orientation="h", x=0.5, xanchor="center", y=-0.18,
+    ),
+    height  = 420,
+    width   = 1200,
+    margin  = dict(t=55, r=80, b=90, l=70),
+))
+
+path5 = OUT_DIR / "peak_week_dispatch.png"
+fig5.write_image(str(path5), **PNG_OPTS)
+print(f"Saved: {path5}")
+
 print(f"\nAll plots saved to docs/images/")
 print(f"Annual revenue (real MILP): €{result['annual_revenue_eur']:,.0f}")
 print(f"RFNBO penalty:              €{penalty:,.0f} ({penalty_pct:.1f}%)")
+print(f"Peak revenue week:          week {best_week + 1}  (€{weekly_rev[best_week]:,.0f})")

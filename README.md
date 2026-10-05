@@ -15,6 +15,8 @@ Built with [Pyomo](http://www.pyomo.org/) and solved with the open-source
 
 ## Results
 
+![Peak-Revenue Week — Dispatch vs Price vs SoC](docs/images/peak_week_dispatch.png)
+
 ![Dispatch & Market Prices](docs/images/dispatch_snapshot.png)
 
 ![State of Energy (SoC)](docs/images/soc_snapshot.png)
