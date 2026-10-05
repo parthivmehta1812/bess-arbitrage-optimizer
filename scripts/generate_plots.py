@@ -397,6 +397,102 @@ path5 = OUT_DIR / "peak_week_dispatch.png"
 fig5.write_image(str(path5), **PNG_OPTS)
 print(f"Saved: {path5}")
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Plot 6 — Peak week: Unconstrained vs RFNBO side-by-side
+# ─────────────────────────────────────────────────────────────────────────────
+charge_rfnbo_arr = np.array(result_rfnbo["schedule"]["Charge_MW"])
+disch_rfnbo_arr  = np.array(result_rfnbo["schedule"]["Discharge_MW"])
+soc_rfnbo_arr    = np.array(result_rfnbo["schedule"]["SoC_MWh"])
+
+soc_rfnbo_pct = (soc_rfnbo_arr[s:e] / cap_mwh * 100).tolist()
+
+fig6 = make_subplots(
+    rows=1, cols=2,
+    subplot_titles=(
+        f"Unconstrained  (€{weekly_rev[best_week]:,.0f}/week)",
+        f"RFNBO Compliant  (€{np.array(rev_rfnbo)[s:e].sum():,.0f}/week)",
+    ),
+    specs=[[{"secondary_y": True}, {"secondary_y": True}]],
+    horizontal_spacing=0.10,
+)
+
+for col, (c_arr, d_arr, s_pct, label) in enumerate([
+    (charge_arr,       disch_arr,       soc_pct,      "Unconstrained"),
+    (charge_rfnbo_arr, disch_rfnbo_arr, soc_rfnbo_pct,"RFNBO compliant"),
+], start=1):
+    show = (col == 1)
+    fig6.add_trace(go.Bar(
+        name="Charge (buy)", x=hw, y=c_arr[s:e].tolist(),
+        marker=dict(color="#2DD4BF", opacity=0.9),
+        showlegend=show, legendgroup="charge",
+    ), row=1, col=col, secondary_y=False)
+
+    fig6.add_trace(go.Bar(
+        name="Discharge (sell)", x=hw, y=(-d_arr[s:e]).tolist(),
+        marker=dict(color="#F97316", opacity=0.9),
+        showlegend=show, legendgroup="discharge",
+    ), row=1, col=col, secondary_y=False)
+
+    fig6.add_trace(go.Scatter(
+        name="Price (€/MWh)", x=hw, y=price_arr[s:e].tolist(),
+        mode="lines", line=dict(color="#EF4444", width=1.5),
+        showlegend=show, legendgroup="price",
+    ), row=1, col=col, secondary_y=True)
+
+    fig6.add_trace(go.Scatter(
+        name="SoC (%)", x=hw, y=s_pct,
+        mode="lines", line=dict(color="#3B82F6", width=1.5, dash="dash"),
+        showlegend=show, legendgroup="soc",
+    ), row=1, col=col, secondary_y=True)
+
+fig6.update_layout(
+    paper_bgcolor = C["white"],
+    plot_bgcolor  = C["plotBg"],
+    font          = dict(family="Inter, Arial, sans-serif", size=11, color=C["gray600"]),
+    title         = dict(
+        text=f"Peak-Revenue Week (week {best_week + 1}) — Unconstrained vs RFNBO Compliant",
+        font=dict(size=13, color=C["gray900"]), x=0.01,
+    ),
+    barmode = "relative",
+    legend  = dict(
+        bgcolor="rgba(255,255,255,0.9)", bordercolor=C["gray200"], borderwidth=1,
+        orientation="h", x=0.5, xanchor="center", y=-0.18,
+    ),
+    margin  = dict(t=70, r=80, b=90, l=70),
+    height  = 440,
+    width   = 1400,
+)
+fig6.update_xaxes(gridcolor=C["gray200"], linecolor=C["gray200"], title_text="Hour of week")
+fig6.update_yaxes(gridcolor=C["gray200"], linecolor=C["gray200"],
+                  title_text="Power (MW)  [+ charge / − discharge]", secondary_y=False)
+fig6.update_yaxes(title_text="Price (€/MWh) / SoC (%)", secondary_y=True, showgrid=False)
+
+path6 = OUT_DIR / "rfnbo_peak_week_comparison.png"
+fig6.write_image(str(path6), format="png", width=1400, height=440, scale=2)
+print(f"Saved: {path6}")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Save combined KPI table as markdown (for README)
+# ─────────────────────────────────────────────────────────────────────────────
+kpis_rfnbo = result_rfnbo["kpis"]
+table_md = f"""| Parameter | Unconstrained | RFNBO Compliant |
+|---|---|---|
+| Battery Capacity | {kpis['optimal_capacity_mwh']} MWh | {kpis['optimal_capacity_mwh']} MWh |
+| Power Rating | {kpis['optimal_power_mw']} MW | {kpis['optimal_power_mw']} MW |
+| E:P Ratio | {kpis['ep_ratio_h']} h | {kpis['ep_ratio_h']} h |
+| Round-trip Efficiency | {kpis['efficiency_pct']}% | {kpis['efficiency_pct']}% |
+| Annual Revenue | €{kpis['annual_revenue_eur']:,.0f} | €{kpis_rfnbo['annual_revenue_eur']:,.0f} |
+| Annual Cycles | {kpis['annual_cycles']} | {kpis_rfnbo['annual_cycles']} |
+| Total Charged | {kpis['total_charged_mwh']:,.0f} MWh | {kpis_rfnbo['total_charged_mwh']:,.0f} MWh |
+| Total Discharged | {kpis['total_discharged_mwh']:,.0f} MWh | {kpis_rfnbo['total_discharged_mwh']:,.0f} MWh |
+| Avg Charge Price | {kpis['avg_charge_price_eur_mwh']} €/MWh | {kpis_rfnbo['avg_charge_price_eur_mwh']} €/MWh |
+| Avg Discharge Price | {kpis['avg_discharge_price_eur_mwh']} €/MWh | {kpis_rfnbo['avg_discharge_price_eur_mwh']} €/MWh |
+| Solver Status | {kpis['solver_status']} | {kpis_rfnbo['solver_status']} |
+"""
+with open(ROOT / "docs" / "results_table.md", "w") as f:
+    f.write(table_md)
+print(f"Saved: docs/results_table.md")
+
 print(f"\nAll plots saved to docs/images/")
 print(f"Annual revenue (real MILP): €{result['annual_revenue_eur']:,.0f}")
 print(f"RFNBO penalty:              €{penalty:,.0f} ({penalty_pct:.1f}%)")

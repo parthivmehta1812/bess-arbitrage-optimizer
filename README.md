@@ -15,6 +15,31 @@ Built with [Pyomo](http://www.pyomo.org/) and solved with the open-source
 
 ## Results
 
+### Run Parameters & Key Results
+
+| Parameter | Unconstrained | RFNBO Compliant |
+|---|---|---|
+| Battery Capacity | 8.0 MWh | 8.0 MWh |
+| Power Rating | 2.0 MW | 2.0 MW |
+| E:P Ratio | 4.0 h | 4.0 h |
+| Round-trip Efficiency | 92.0% | 92.0% |
+| Annual Revenue | €354,285 | €319,303 |
+| Annual Cycles | 811 | 575 |
+| Total Charged | 7,052 MWh | 5,000 MWh |
+| Total Discharged | 6,490 MWh | 4,602 MWh |
+| Avg Charge Price | 11.54 €/MWh | 3.05 €/MWh |
+| Avg Discharge Price | 70.55 €/MWh | 75.95 €/MWh |
+| RFNBO Revenue Penalty | — | €34,983 (9.9%) |
+| Solver | HiGHS (optimal) | HiGHS (optimal) |
+
+> Results based on a synthetic 2024 DE price profile (min −40, max +147 €/MWh). Run `examples/01_basic_run.py` with your own ENTSO-E data for real-world results.
+
+---
+
+### Plots
+
+![Peak-Revenue Week — Unconstrained vs RFNBO](docs/images/rfnbo_peak_week_comparison.png)
+
 ![Peak-Revenue Week — Dispatch vs Price vs SoC](docs/images/peak_week_dispatch.png)
 
 ![Dispatch & Market Prices](docs/images/dispatch_snapshot.png)
