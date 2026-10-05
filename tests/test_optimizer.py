@@ -79,16 +79,17 @@ class TestLoader:
 
 # ── Optimizer tests ───────────────────────────────────────────────────────────
 
-@requires_solver
 @pytest.fixture(scope="module")
 def basic_result():
     """Solve a small fixed-sizing problem once and reuse across tests."""
+    if not _PYOMO_OK:
+        pytest.skip("Pyomo not installed")
     price_bytes = _make_price_csv("alternating")
     return optimize_bess_arbitrage(
         price_bytes=price_bytes,
         battery_capacity_mwh=4.0,
         max_power_mw=2.0,
-        efficiency=1.0,   # perfect efficiency simplifies assertions
+        efficiency=1.0,
         optimize_sizing=False,
         rfnbo_compliant=False,
     )
@@ -144,6 +145,8 @@ class TestFixedSizing:
 
 class TestRfnboGate:
     def test_no_charging_above_threshold(self):
+        if not _PYOMO_OK:
+            pytest.skip("Pyomo not installed")
         price_bytes = _make_price_csv("alternating")  # prices are 10 and 80
         result = optimize_bess_arbitrage(
             price_bytes=price_bytes,

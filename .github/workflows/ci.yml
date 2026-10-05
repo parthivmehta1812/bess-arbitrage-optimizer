@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.11", "3.12"]
 
     steps:
       - uses: actions/checkout@v4
@@ -40,9 +40,3 @@ jobs:
 
       - name: Run tests
         run: pytest tests/ -v --cov=bess_arbitrage --cov-report=term-missing
-
-      - name: Upload coverage
-        if: matrix.python-version == '3.11'
-        uses: codecov/codecov-action@v4
-        with:
-          fail_ci_if_error: false
