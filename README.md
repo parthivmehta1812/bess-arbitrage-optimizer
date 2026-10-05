@@ -21,6 +21,8 @@ Built with [Pyomo](http://www.pyomo.org/) and solved with the open-source
 
 ![Monthly revenue](docs/images/monthly_revenue.png)
 
+![RFNBO compliance analysis](docs/images/rfnbo_analysis.png)
+
 ---
 
 ## Features
