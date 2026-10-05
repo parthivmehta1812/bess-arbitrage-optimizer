@@ -13,6 +13,16 @@ Built with [Pyomo](http://www.pyomo.org/) and solved with the open-source
 
 ---
 
+## Results
+
+![2-week dispatch snapshot](docs/images/dispatch_snapshot.png)
+
+![Annual summary](docs/images/annual_summary.png)
+
+![Monthly revenue](docs/images/monthly_revenue.png)
+
+---
+
 ## Features
 
 | Feature | Details |
