@@ -391,6 +391,166 @@ fig5.write_image(str(path5), **PNG_OPTS)
 print(f"Saved: {path5}")
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Plot 6 — Forecast vs Perfect Foresight
+# Train a GBM price forecaster on the first 8 months, forecast the remaining
+# ~4 months, run the MILP on both and compare cumulative revenue.
+# ─────────────────────────────────────────────────────────────────────────────
+import io as _io
+import pandas as _pd
+from bess_arbitrage.forecaster import train_price_forecaster, forecast_prices as fc_prices
+
+TRAIN_END  = 5832   # first 8 months (Jan–Aug, 24*243 = 5832)
+TEST_START = 5832
+TEST_END   = 8760   # Sep–Dec (2928 hours)
+
+print("\nTraining 24h-ahead price forecaster (GBM, scikit-learn)...")
+fc_models = train_price_forecaster(price_arr, train_end_h=TRAIN_END)
+
+print("Generating forecasts for test period (Sep–Dec)...")
+fc_point, fc_lower, fc_upper = fc_prices(fc_models, price_arr, TEST_START, TEST_END)
+actual_test = price_arr[TEST_START:TEST_END]
+
+mae  = float(np.mean(np.abs(fc_point - actual_test)))
+rmse = float(np.sqrt(np.mean((fc_point - actual_test) ** 2)))
+print(f"[forecaster] MAE={mae:.1f} €/MWh  RMSE={rmse:.1f} €/MWh")
+
+def _arr_to_price_bytes(arr):
+    buf = _io.BytesIO()
+    _pd.DataFrame({"Price_EUR_MWh": arr}).to_csv(buf, index=False)
+    return buf.getvalue()
+
+print("Running test-period MILP — perfect foresight...")
+res_perfect = optimize_bess_arbitrage(
+    price_bytes          = _arr_to_price_bytes(actual_test),
+    battery_capacity_mwh = 8.0,
+    max_power_mw         = 2.0,
+    efficiency           = 0.92,
+    initial_soc          = 0.5,
+)
+print("Running test-period MILP — forecast-driven...")
+res_forecast = optimize_bess_arbitrage(
+    price_bytes          = _arr_to_price_bytes(fc_point),
+    battery_capacity_mwh = 8.0,
+    max_power_mw         = 2.0,
+    efficiency           = 0.92,
+    initial_soc          = 0.5,
+)
+
+# Revenue is evaluated against ACTUAL prices (forecast just drives dispatch)
+N_TEST       = TEST_END - TEST_START
+actual_arr   = np.array(actual_test)
+sqrt_eff_val = np.sqrt(0.92)
+
+fc_charge    = np.array(res_forecast["schedule"]["Charge_MW"])[:N_TEST]
+fc_discharge = np.array(res_forecast["schedule"]["Discharge_MW"])[:N_TEST]
+rev_forecast_actual = actual_arr * (fc_discharge * sqrt_eff_val - fc_charge / sqrt_eff_val)
+
+rev_perfect  = np.array(res_perfect["schedule"]["Revenue_EUR"])[:N_TEST]
+
+cumrev_perfect  = np.cumsum(rev_perfect)
+cumrev_forecast = np.cumsum(rev_forecast_actual)
+
+total_perfect  = float(cumrev_perfect[-1])
+total_forecast = float(cumrev_forecast[-1])
+capture_rate   = total_forecast / max(abs(total_perfect), 1) * 100
+
+print(f"[forecast] Perfect: €{total_perfect:,.0f}  |  Forecast-driven: €{total_forecast:,.0f}  |  Capture: {capture_rate:.1f}%")
+
+# ── Build figure ──────────────────────────────────────────────────────────────
+DISP_H = 14 * 24   # 2-week display window for forecast accuracy panel
+hw_fc  = list(range(DISP_H))
+hw_all = list(range(TEST_END - TEST_START))
+
+fig6 = make_subplots(
+    rows=2, cols=1,
+    subplot_titles=(
+        f"24h-Ahead Price Forecast vs Actual  —  2-Week Window  "
+        f"(MAE={mae:.1f} €/MWh, RMSE={rmse:.1f} €/MWh)",
+        f"Cumulative Revenue: Perfect Foresight vs Forecast-Driven  "
+        f"(Sep–Dec test period, revenue capture {capture_rate:.1f}%)",
+    ),
+    vertical_spacing=0.18,
+)
+
+# ── Top panel: forecast accuracy ──────────────────────────────────────────────
+fig6.add_trace(go.Scatter(
+    name       = "80% prediction interval",
+    x          = hw_fc + hw_fc[::-1],
+    y          = fc_upper[:DISP_H].tolist() + fc_lower[:DISP_H].tolist()[::-1],
+    fill       = "toself",
+    fillcolor  = C["brandLighter"] + "66",
+    line       = dict(color="rgba(0,0,0,0)"),
+    showlegend = True,
+), row=1, col=1)
+
+fig6.add_trace(go.Scatter(
+    name = "Forecast (p50)",
+    x    = hw_fc,
+    y    = fc_point[:DISP_H].tolist(),
+    mode = "lines",
+    line = dict(color=C["brand"], width=1.5, dash="dash"),
+), row=1, col=1)
+
+fig6.add_trace(go.Scatter(
+    name = "Actual price",
+    x    = hw_fc,
+    y    = actual_test[:DISP_H].tolist(),
+    mode = "lines",
+    line = dict(color=C["error"], width=1.5),
+), row=1, col=1)
+
+# ── Bottom panel: cumulative revenue ─────────────────────────────────────────
+fig6.add_trace(go.Scatter(
+    name = "Perfect foresight",
+    x    = hw_all,
+    y    = (cumrev_perfect / 1000).tolist(),
+    mode = "lines",
+    line = dict(color=C["brand"], width=2),
+), row=2, col=1)
+
+fig6.add_trace(go.Scatter(
+    name = "Forecast-driven",
+    x    = hw_all,
+    y    = (cumrev_forecast / 1000).tolist(),
+    mode = "lines",
+    line = dict(color=C["success"], width=2, dash="dash"),
+), row=2, col=1)
+
+fig6.add_trace(go.Scatter(
+    name      = "Revenue gap",
+    x         = hw_all + hw_all[::-1],
+    y         = (cumrev_perfect / 1000).tolist() + (cumrev_forecast / 1000).tolist()[::-1],
+    fill      = "toself",
+    fillcolor = "rgba(239,68,68,0.10)",
+    line      = dict(color="rgba(0,0,0,0)"),
+    showlegend= True,
+), row=2, col=1)
+
+fig6.update_layout(
+    paper_bgcolor = C["white"],
+    plot_bgcolor  = C["plotBg"],
+    font          = dict(family="Inter, Arial, sans-serif", size=12, color=C["gray600"]),
+    title         = dict(
+        text="Price Forecasting vs Perfect Foresight — Dispatch Revenue Impact",
+        font=dict(size=13, color=C["gray900"]), x=0.01,
+    ),
+    legend = dict(bgcolor="rgba(255,255,255,0.9)", bordercolor=C["gray200"], borderwidth=1),
+    margin = dict(t=70, r=60, b=55, l=70),
+    height = 720,
+    width  = 1200,
+)
+fig6.update_xaxes(gridcolor=C["gray200"], linecolor=C["gray200"], zerolinecolor=C["gray200"])
+fig6.update_yaxes(gridcolor=C["gray200"], linecolor=C["gray200"], zerolinecolor=C["gray200"])
+fig6.update_xaxes(title_text="Hour of test period", row=1, col=1)
+fig6.update_yaxes(title_text="Price (€/MWh)", row=1, col=1)
+fig6.update_xaxes(title_text="Hour of test period", row=2, col=1)
+fig6.update_yaxes(title_text="Cumulative Revenue (k€)", row=2, col=1)
+
+path6 = OUT_DIR / "forecast_vs_perfect.png"
+fig6.write_image(str(path6), format="png", width=1200, height=720, scale=2)
+print(f"Saved: {path6}")
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Save combined KPI table as markdown (for README)
 # ─────────────────────────────────────────────────────────────────────────────
 kpis_rfnbo = result_rfnbo["kpis"]

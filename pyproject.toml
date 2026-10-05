@@ -32,6 +32,7 @@ dependencies = [
     "pandas>=2.0",
     "numpy>=1.26",
     "openpyxl>=3.1",
+    "scikit-learn>=1.4",
 ]
 
 [project.optional-dependencies]

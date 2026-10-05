@@ -46,6 +46,8 @@ Built with [Pyomo](http://www.pyomo.org/) and solved with the open-source
 
 ![RFNBO Compliance Analysis](docs/images/rfnbo_analysis.png)
 
+![Price Forecasting vs Perfect Foresight](docs/images/forecast_vs_perfect.png)
+
 ---
 
 ## Features
@@ -153,6 +155,36 @@ with open("my_prices.csv", "rb") as f:
 ```
 
 See [`examples/`](examples/) for more complete scripts.
+
+---
+
+## Price forecasting
+
+A 24-hour-ahead price forecaster is included alongside the optimizer.  It uses
+gradient-boosted regression trees (scikit-learn) trained on calendar signals
+and lagged prices, and produces both a point forecast and an 80% prediction
+interval.
+
+```python
+from bess_arbitrage import train_price_forecaster, forecast_prices
+import numpy as np
+
+prices = ...  # np.ndarray, 8760 hourly prices
+
+# Train on first 8 months
+models = train_price_forecaster(prices, train_end_h=5832)
+
+# Forecast Sep–Dec (hours 5832–8760) with uncertainty bands
+point, lower, upper = forecast_prices(models, prices, start_h=5832, end_h=8760)
+```
+
+Evaluated on 2023 German ENTSO-E prices (Sep–Dec hold-out):
+
+| Metric | Value |
+|---|---|
+| MAE | 21.1 €/MWh |
+| RMSE | 28.1 €/MWh |
+| Revenue capture vs perfect foresight | 77.0% |
 
 ---
 
