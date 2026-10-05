@@ -38,7 +38,7 @@ Built with [Pyomo](http://www.pyomo.org/) and solved with the open-source
 
 ### Plots
 
-![Peak-Revenue Week — Unconstrained vs RFNBO](docs/images/peak_week_comparison.png)
+![Week 1 — Dispatch vs Price vs SoC](docs/images/peak_week_comparison.png)
 
 ![Dispatch & Market Prices](docs/images/dispatch_snapshot.png)
 
