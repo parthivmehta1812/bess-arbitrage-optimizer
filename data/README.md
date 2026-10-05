@@ -1,10 +1,9 @@
 # Price Data
 
-## Bundled sample
+## Bundled dataset
 
-A small subset of 2024 German ENTSO-E day-ahead prices is included at
-`sample_de_2024_prices.csv` for running tests and examples without a
-network connection.
+`Electricity_Price_2023_DE.xlsx` — 2023 German ENTSO-E day-ahead prices (8760 hourly values, EUR/MWh).
+This is the default dataset used when no price file is passed to the optimizer.
 
 ## Using your own price data
 
@@ -16,7 +15,7 @@ with open("my_prices.csv", "rb") as f:
     result = optimize_bess_arbitrage(price_bytes=f.read())
 ```
 
-## Downloading full ENTSO-E data
+## Downloading ENTSO-E data
 
 1. Go to <https://transparency.entsoe.eu/transmission-domain/r2/dayAheadPrices/show>
 2. Select country, year, and resolution = **PT60M**
@@ -29,4 +28,4 @@ with open("my_prices.csv", "rb") as f:
 |---|---|---|
 | Any name | numeric | EUR/MWh |
 
-Only the **first numeric column** is used.  All other columns are ignored.
+Only the **first numeric column** is used. All other columns are ignored.

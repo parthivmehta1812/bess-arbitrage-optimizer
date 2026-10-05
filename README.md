@@ -23,16 +23,16 @@ Built with [Pyomo](http://www.pyomo.org/) and solved with the open-source
 | Power Rating | 2.0 MW | 2.0 MW |
 | E:P Ratio | 4.0 h | 4.0 h |
 | Round-trip Efficiency | 92.0% | 92.0% |
-| Annual Revenue | €354,285 | €319,303 |
-| Annual Cycles | 811 | 575 |
-| Total Charged | 7,052 MWh | 5,000 MWh |
-| Total Discharged | 6,490 MWh | 4,602 MWh |
-| Avg Charge Price | 11.54 €/MWh | 3.05 €/MWh |
-| Avg Discharge Price | 70.55 €/MWh | 75.95 €/MWh |
-| RFNBO Revenue Penalty | — | €34,983 (9.9%) |
+| Annual Revenue | €289,981 | €194,709 |
+| Annual Cycles | 539 | 211 |
+| Total Charged | 4,688 MWh | 1,829 MWh |
+| Total Discharged | 4,314 MWh | 1,685 MWh |
+| Avg Charge Price | 49.68 €/MWh | −2.91 €/MWh |
+| Avg Discharge Price | 128.74 €/MWh | 117.05 €/MWh |
+| RFNBO Revenue Penalty | — | €95,271 (32.9%) |
 | Solver | HiGHS (optimal) | HiGHS (optimal) |
 
-> Results based on a synthetic 2024 DE price profile (min −40, max +147 €/MWh). Run `examples/01_basic_run.py` with your own ENTSO-E data for real-world results.
+> Results based on real 2023 German ENTSO-E day-ahead prices (min −129.8, max +583.4 EUR/MWh).
 
 ---
 

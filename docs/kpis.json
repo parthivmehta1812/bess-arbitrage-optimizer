@@ -1,14 +1,14 @@
 {
-  "annual_revenue_eur": 354285.45,
+  "annual_revenue_eur": 289980.64,
   "optimal_capacity_mwh": 8.0,
   "optimal_power_mw": 2.0,
   "ep_ratio_h": 4.0,
   "efficiency_pct": 92.0,
-  "total_charged_mwh": 7051.8,
-  "total_discharged_mwh": 6489.6,
-  "annual_cycles": 811.2,
-  "avg_charge_price_eur_mwh": 11.54,
-  "avg_discharge_price_eur_mwh": 70.55,
+  "total_charged_mwh": 4687.5,
+  "total_discharged_mwh": 4314.5,
+  "annual_cycles": 539.3,
+  "avg_charge_price_eur_mwh": 49.68,
+  "avg_discharge_price_eur_mwh": 128.74,
   "rfnbo_compliant": false,
   "solver_status": "optimal"
 }

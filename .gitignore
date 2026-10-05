@@ -41,6 +41,4 @@ Thumbs.db
 *.log
 
 # Local price data (may be large / proprietary)
-data/*.xlsx
 data/*.csv
-!data/sample_de_2024_prices.csv

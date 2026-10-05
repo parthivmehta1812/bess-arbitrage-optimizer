@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-_SAMPLE_DATA_PATH = Path(__file__).parent.parent.parent / "data" / "sample_de_2024_prices.csv"
+_SAMPLE_DATA_PATH = Path(__file__).parent.parent.parent / "data" / "Electricity_Price_2023_DE.xlsx"
 
 HOURS_PER_YEAR = 8760
 
@@ -47,8 +47,8 @@ def load_prices(price_bytes: bytes | None = None) -> np.ndarray:
                 f"Sample price file not found at {_SAMPLE_DATA_PATH}. "
                 "Download ENTSO-E data per data/README.md or pass price_bytes."
             )
-        print("[loader] No price file supplied — using bundled sample (2024 DE ENTSO-E).")
-        df = pd.read_csv(_SAMPLE_DATA_PATH, header=0)
+        print("[loader] No price file supplied — using bundled 2023 DE ENTSO-E prices.")
+        df = pd.read_excel(_SAMPLE_DATA_PATH, header=0)
 
     numeric_cols = df.select_dtypes(include=[np.number]).columns
     if len(numeric_cols) == 0:
@@ -57,7 +57,17 @@ def load_prices(price_bytes: bytes | None = None) -> np.ndarray:
             "Expected at least one column with EUR/MWh values."
         )
 
-    prices = df[numeric_cols[0]].dropna().values.astype(float)
+    # Skip columns that look like a sequential row index (e.g. 0,1,2,...,8759)
+    price_col = None
+    for col in numeric_cols:
+        vals = df[col].dropna().values
+        if not (vals.min() == 0 and vals.max() == len(vals) - 1):
+            price_col = col
+            break
+    if price_col is None:
+        price_col = numeric_cols[-1]
+
+    prices = df[price_col].dropna().values.astype(float)
 
     # Trim or forward-fill to exactly 8760 hours
     if len(prices) >= HOURS_PER_YEAR:
