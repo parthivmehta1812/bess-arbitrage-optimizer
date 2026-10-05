@@ -314,105 +314,58 @@ fig4.write_image(str(path4), **PNG_OPTS)
 print(f"Saved: {path4}")
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Plot 5 — Peak-Revenue Week: Unconstrained vs RFNBO in one unified chart
-# Bars are the only visual differentiator between the two scenarios.
+# Plot 5 — Week 1: Dispatch vs Price vs SoC
 # ─────────────────────────────────────────────────────────────────────────────
 import numpy as np
 
-rev_arr    = np.array(revenue_eur)
 charge_arr = np.array(charge_mw)
 disch_arr  = np.array(discharge_mw)
 soc_arr    = np.array(soc_mwh)
 price_arr  = np.array(prices)
+rev_arr    = np.array(revenue_eur)
 
-# Find the week (168 h window) with highest total revenue
-weekly_rev = [rev_arr[i*168:(i+1)*168].sum() for i in range(52)]
-best_week  = int(np.argmax(weekly_rev))
-s = best_week * 168
-e = s + 168
-hw = list(range(168))   # hour-of-week x-axis
-
-charge_rfnbo_arr = np.array(result_rfnbo["schedule"]["Charge_MW"])
-disch_rfnbo_arr  = np.array(result_rfnbo["schedule"]["Discharge_MW"])
-soc_rfnbo_arr    = np.array(result_rfnbo["schedule"]["SoC_MWh"])
-
-soc_pct       = (soc_arr[s:e]       / cap_mwh * 100).tolist()
-soc_rfnbo_pct = (soc_rfnbo_arr[s:e] / cap_mwh * 100).tolist()
-
-week_rev_unc  = weekly_rev[best_week]
-week_rev_rfnbo = float(np.array(rev_rfnbo)[s:e].sum())
+# Fixed: first 168 hours of the year (Week 1)
+hw = list(range(168))
+soc_pct = (soc_arr[:168] / cap_mwh * 100).tolist()
 
 fig5 = make_subplots(specs=[[{"secondary_y": True}]])
 
-# ── Bars: Unconstrained (teal charge / orange discharge) ─────────────────────
 fig5.add_trace(go.Bar(
-    name        = f"Charge — Unconstrained",
-    x           = hw,
-    y           = charge_arr[s:e].tolist(),
-    marker      = dict(color="#2DD4BF", opacity=0.9),
-    offsetgroup = 0,
+    name   = "Charge (buy)",
+    x      = hw,
+    y      = charge_arr[:168].tolist(),
+    marker = dict(color="#2DD4BF", opacity=0.9),
 ), secondary_y=False)
 
 fig5.add_trace(go.Bar(
-    name        = f"Discharge — Unconstrained",
-    x           = hw,
-    y           = (-disch_arr[s:e]).tolist(),
-    marker      = dict(color="#F97316", opacity=0.9),
-    offsetgroup = 0,
+    name   = "Discharge (sell)",
+    x      = hw,
+    y      = (-disch_arr[:168]).tolist(),
+    marker = dict(color="#F97316", opacity=0.9),
 ), secondary_y=False)
 
-# ── Bars: RFNBO (blue charge / amber discharge), overlaid at lower opacity ───
-fig5.add_trace(go.Bar(
-    name        = f"Charge — RFNBO",
-    x           = hw,
-    y           = charge_rfnbo_arr[s:e].tolist(),
-    marker      = dict(color="#60A5FA", opacity=0.65),
-    offsetgroup = 1,
-), secondary_y=False)
-
-fig5.add_trace(go.Bar(
-    name        = f"Discharge — RFNBO",
-    x           = hw,
-    y           = (-disch_rfnbo_arr[s:e]).tolist(),
-    marker      = dict(color="#A78BFA", opacity=0.65),
-    offsetgroup = 1,
-), secondary_y=False)
-
-# ── Lines: shared price + two SoC curves ─────────────────────────────────────
 fig5.add_trace(go.Scatter(
     name = "Price (€/MWh)",
     x    = hw,
-    y    = price_arr[s:e].tolist(),
+    y    = price_arr[:168].tolist(),
     mode = "lines",
     line = dict(color="#EF4444", width=1.5),
 ), secondary_y=True)
 
 fig5.add_trace(go.Scatter(
-    name = "SoC — Unconstrained (%)",
+    name = "SoC (%)",
     x    = hw,
     y    = soc_pct,
     mode = "lines",
     line = dict(color="#3B82F6", width=1.5, dash="dash"),
 ), secondary_y=True)
 
-fig5.add_trace(go.Scatter(
-    name = "SoC — RFNBO (%)",
-    x    = hw,
-    y    = soc_rfnbo_pct,
-    mode = "lines",
-    line = dict(color="#22C55E", width=1.5, dash="dot"),
-), secondary_y=True)
-
 fig5.update_layout(base_layout(
     title   = dict(
-        text=(
-            f"Peak-Revenue Week (week {best_week + 1}) — Unconstrained vs RFNBO  "
-            f"[€{week_rev_unc:,.0f}  vs  €{week_rev_rfnbo:,.0f}]"
-        ),
-        font=dict(size=13, color=C["gray900"]), x=0.01,
+        text="Week 1 — Dispatch vs Price vs SoC",
+        font=dict(size=14, color=C["gray900"]), x=0.01,
     ),
-    barmode = "group",
-    bargap  = 0.15,
+    barmode = "relative",
     xaxis   = dict(**AXIS_STYLE, title=dict(text="Hour of week")),
     yaxis   = dict(**AXIS_STYLE, title=dict(text="Power (MW)  [+ charge / − discharge]")),
     yaxis2  = dict(
@@ -422,15 +375,19 @@ fig5.update_layout(base_layout(
     ),
     legend  = dict(
         bgcolor="rgba(255,255,255,0.9)", bordercolor=C["gray200"], borderwidth=1,
-        orientation="h", x=0.5, xanchor="center", y=-0.22,
+        orientation="h", x=0.5, xanchor="center", y=-0.18,
     ),
-    height  = 460,
-    width   = 1400,
-    margin  = dict(t=60, r=90, b=110, l=70),
+    height  = 420,
+    width   = 1200,
+    margin  = dict(t=55, r=90, b=90, l=70),
 ))
 
+# Also compute best_week for the print summary at end
+weekly_rev = [rev_arr[i*168:(i+1)*168].sum() for i in range(52)]
+best_week  = int(np.argmax(weekly_rev))
+
 path5 = OUT_DIR / "peak_week_comparison.png"
-fig5.write_image(str(path5), format="png", width=1400, height=460, scale=2)
+fig5.write_image(str(path5), **PNG_OPTS)
 print(f"Saved: {path5}")
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -458,4 +415,4 @@ print(f"Saved: docs/results_table.md")
 print(f"\nAll plots saved to docs/images/")
 print(f"Annual revenue (real MILP): €{result['annual_revenue_eur']:,.0f}")
 print(f"RFNBO penalty:              €{penalty:,.0f} ({penalty_pct:.1f}%)")
-print(f"Peak revenue week:          week {best_week + 1}  (€{weekly_rev[best_week]:,.0f}  unconstrained  /  €{week_rev_rfnbo:,.0f}  RFNBO)")
+print(f"Peak revenue week:          week {best_week + 1}  (€{weekly_rev[best_week]:,.0f})")
