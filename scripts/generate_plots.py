@@ -207,8 +207,8 @@ fig.suptitle("RFNBO Additionality Compliance — Impact Analysis", fontsize=13, 
 
 # Panel 1: Cumulative revenue comparison
 ax = axes[0]
-ax.plot(hours, cumrev_std   / 1000, color=GREEN, linewidth=1.5, label="Unconstrained")
-ax.plot(hours, cumrev_rfnbo / 1000, color=ORANGE, linewidth=1.5, linestyle="--", label="RFNBO compliant")
+ax.plot(hours, cumrev_std   / 1000, color=BLUE,  linewidth=1.5, label="Unconstrained")
+ax.plot(hours, cumrev_rfnbo / 1000, color=GREEN, linewidth=1.5, linestyle="--", label="RFNBO compliant")
 ax.fill_between(hours,
                 cumrev_std / 1000,
                 cumrev_rfnbo / 1000,
@@ -222,8 +222,8 @@ ax.legend(fontsize=8)
 ax = axes[1]
 x = np.arange(len(month_names))
 w = 0.38
-ax.bar(x - w/2, [r/1000 for r in monthly_std],   width=w, color=GREEN,  alpha=0.85, label="Unconstrained")
-ax.bar(x + w/2, [r/1000 for r in monthly_rfnbo],  width=w, color=ORANGE, alpha=0.85, label="RFNBO compliant")
+ax.bar(x - w/2, [r/1000 for r in monthly_std],    width=w, color=BLUE,  alpha=0.85, label="Unconstrained")
+ax.bar(x + w/2, [r/1000 for r in monthly_rfnbo],  width=w, color=GREEN, alpha=0.85, label="RFNBO compliant")
 ax.set_xticks(x)
 ax.set_xticklabels(month_names, fontsize=8)
 ax.set_ylabel("Revenue (k€)")
