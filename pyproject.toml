@@ -42,8 +42,8 @@ dev = [
 ]
 notebooks = [
     "jupyter>=1.0",
-    "matplotlib>=3.8",
-    "seaborn>=0.13",
+    "plotly>=5.20",
+    "kaleido>=0.2",
 ]
 
 [project.urls]

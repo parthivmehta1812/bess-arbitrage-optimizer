@@ -1,0 +1,14 @@
+{
+  "annual_revenue_eur": 120358.05,
+  "optimal_capacity_mwh": 8.0,
+  "optimal_power_mw": 2.0,
+  "ep_ratio_h": 4.0,
+  "efficiency_pct": 92.0,
+  "total_charged_mwh": 3109.5,
+  "total_discharged_mwh": 2862.8,
+  "annual_cycles": 357.8,
+  "avg_charge_price_eur_mwh": 37.18,
+  "avg_discharge_price_eur_mwh": 87.73,
+  "rfnbo_compliant": false,
+  "solver_status": "optimal"
+}

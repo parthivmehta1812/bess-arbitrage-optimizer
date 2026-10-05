@@ -15,13 +15,13 @@ Built with [Pyomo](http://www.pyomo.org/) and solved with the open-source
 
 ## Results
 
-![2-week dispatch snapshot](docs/images/dispatch_snapshot.png)
+![Dispatch & Market Prices](docs/images/dispatch_snapshot.png)
 
-![Annual summary](docs/images/annual_summary.png)
+![State of Energy (SoC)](docs/images/soc_snapshot.png)
 
-![Monthly revenue](docs/images/monthly_revenue.png)
+![Monthly Revenue](docs/images/monthly_revenue.png)
 
-![RFNBO compliance analysis](docs/images/rfnbo_analysis.png)
+![RFNBO Compliance Analysis](docs/images/rfnbo_analysis.png)
 
 ---
 
