@@ -47,8 +47,8 @@ notebooks = [
 ]
 
 [project.urls]
-Repository = "https://github.com/Parthiv18122000/bess-arbitrage-optimizer"
-Issues     = "https://github.com/Parthiv18122000/bess-arbitrage-optimizer/issues"
+Repository = "https://github.com/parthivmehta1812/bess-arbitrage-optimizer"
+Issues     = "https://github.com/parthivmehta1812/bess-arbitrage-optimizer/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
