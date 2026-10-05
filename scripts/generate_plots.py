@@ -1,41 +1,93 @@
 """
-Generate sample result plots for the README.
-Run once after installing dependencies:
-    pip install matplotlib seaborn pandas numpy
+Generate result plots for the README.
+Style matches the LCOxEngine dashboard: light card theme, purple/green/teal palette.
+
+Run once:
+    pip install matplotlib pandas numpy
     python scripts/generate_plots.py
 """
 
 import math
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
-import seaborn as sns
+import matplotlib.patches as mpatches
+from matplotlib import rcParams
 from pathlib import Path
 
 OUT_DIR = Path(__file__).parent.parent / "docs" / "images"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-# ── Synthetic price + schedule data (mirrors realistic MILP output) ───────────
+# ── Brand palette (matches LCOxEngine frontend) ───────────────────────────────
+PURPLE  = "#4C09E7"
+DPURPLE = "#2D156E"
+GREEN   = "#22C55E"
+RED     = "#EF4444"
+TEAL    = "#2DD4BF"
+BLUE    = "#3B82F6"
+LGRAY   = "#F5F1FE"
+BORDER  = "#DCD7EC"
+MGRAY   = "#6E6599"
+DARK    = "#18122B"
+
+# ── Global style ──────────────────────────────────────────────────────────────
+rcParams.update({
+    "font.family":        "DejaVu Sans",
+    "font.size":          9,
+    "axes.facecolor":     "white",
+    "figure.facecolor":   LGRAY,
+    "axes.edgecolor":     BORDER,
+    "axes.linewidth":     1.0,
+    "axes.grid":          True,
+    "grid.color":         BORDER,
+    "grid.linewidth":     0.6,
+    "grid.alpha":         1.0,
+    "xtick.color":        MGRAY,
+    "ytick.color":        MGRAY,
+    "axes.labelcolor":    DARK,
+    "text.color":         DARK,
+    "legend.frameon":     True,
+    "legend.framealpha":  1.0,
+    "legend.edgecolor":   BORDER,
+    "legend.facecolor":   "white",
+    "figure.dpi":         150,
+})
+
+def card_fig(nrows, ncols, figsize, title):
+    """Create a figure styled like a dashboard card."""
+    fig, axes = plt.subplots(nrows, ncols, figsize=figsize)
+    fig.patch.set_facecolor(LGRAY)
+    fig.suptitle(title, fontsize=12, fontweight="bold", color=DARK,
+                 x=0.5, y=0.98, va="top")
+    # Purple top accent bar
+    fig.patches.append(
+        mpatches.FancyBboxPatch(
+            (0.02, 0.96), 0.96, 0.008,
+            boxstyle="square,pad=0",
+            transform=fig.transFigure,
+            color=PURPLE, zorder=10, clip_on=False,
+        )
+    )
+    return fig, axes
+
+# ── Synthetic price + schedule ────────────────────────────────────────────────
 rng = np.random.default_rng(42)
 hours = np.arange(8760)
-
-# Realistic price shape: low at night, high at peak
 hour_of_day = hours % 24
+
 base_price = 35 + 55 * np.clip(np.sin(np.pi * (hour_of_day - 6) / 14), 0, 1)
 seasonal   = 10 * np.cos(2 * np.pi * hours / 8760)
 noise      = rng.normal(0, 8, 8760)
 prices     = np.clip(base_price + seasonal + noise, -10, 200)
 
-# Simulate charge when price < 30, discharge when price > 70
-capacity   = 8.0   # MWh
-max_power  = 2.0   # MW
+capacity   = 8.0
+max_power  = 2.0
 efficiency = 0.92
 sqrt_eff   = math.sqrt(efficiency)
-soc        = np.zeros(8760)
-charge     = np.zeros(8760)
-discharge  = np.zeros(8760)
-soc[0]     = capacity * 0.5
+
+soc      = np.zeros(8760)
+charge   = np.zeros(8760)
+discharge = np.zeros(8760)
+soc[0]   = capacity * 0.5
 
 for t in range(1, 8760):
     prev = soc[t - 1]
@@ -53,132 +105,140 @@ for t in range(1, 8760):
 revenue_per_hour = prices * (discharge * sqrt_eff - charge / sqrt_eff)
 cumulative_rev   = np.cumsum(revenue_per_hour)
 
-# ── Plot styling ──────────────────────────────────────────────────────────────
-plt.rcParams.update({
-    "font.family":     "sans-serif",
-    "axes.spines.top": False,
-    "axes.spines.right": False,
-    "axes.grid":       True,
-    "grid.alpha":      0.3,
-    "figure.dpi":      150,
-})
-BLUE   = "#2563EB"
-GREEN  = "#16A34A"
-RED    = "#DC2626"
-ORANGE = "#EA580C"
-GRAY   = "#6B7280"
+month_hours = [744, 672, 744, 720, 744, 720, 744, 744, 720, 744, 720, 744]
+month_names = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Figure 1 — Weekly dispatch snapshot (first 2 weeks)
+# Figure 1 — 2-week dispatch snapshot
 # ─────────────────────────────────────────────────────────────────────────────
-WINDOW = 24 * 14  # two weeks
-t_w    = np.arange(WINDOW)
+WINDOW = 24 * 14
+t_w = np.arange(WINDOW)
 
-fig, axes = plt.subplots(3, 1, figsize=(12, 8), sharex=True)
-fig.suptitle("BESS Arbitrage — 2-Week Dispatch Snapshot", fontsize=14, fontweight="bold", y=0.98)
+fig, axes = card_fig(3, 1, (13, 8), "BESS Arbitrage — 2-Week Dispatch Snapshot")
+fig.subplots_adjust(hspace=0.45, left=0.08, right=0.97, top=0.93, bottom=0.07)
 
 # Price
 ax = axes[0]
-ax.plot(t_w, prices[:WINDOW], color=GRAY, linewidth=1, label="Day-ahead price")
-ax.axhline(30, color=BLUE,  linewidth=0.8, linestyle="--", alpha=0.7, label="Charge threshold (30 €)")
-ax.axhline(70, color=RED,   linewidth=0.8, linestyle="--", alpha=0.7, label="Discharge threshold (70 €)")
-ax.set_ylabel("Price (EUR/MWh)")
-ax.legend(fontsize=8, loc="upper right")
+ax.plot(t_w, prices[:WINDOW], color=PURPLE, linewidth=1.2, label="Day-ahead price")
+ax.axhline(30, color=TEAL, linewidth=1.0, linestyle="--", label="Charge threshold (30 €/MWh)")
+ax.axhline(70, color=RED,  linewidth=1.0, linestyle="--", label="Discharge threshold (70 €/MWh)")
+ax.fill_between(t_w, 30, prices[:WINDOW],
+                where=prices[:WINDOW] < 30, alpha=0.12, color=TEAL)
+ax.fill_between(t_w, 70, prices[:WINDOW],
+                where=prices[:WINDOW] > 70, alpha=0.12, color=RED)
+ax.set_ylabel("Price (EUR/MWh)", color=MGRAY, fontsize=8)
+ax.set_title("Day-Ahead Electricity Price", fontsize=9, color=DPURPLE, fontweight="bold", loc="left")
+ax.legend(fontsize=7.5, loc="upper right")
 
 # Charge / discharge
 ax = axes[1]
-ax.bar(t_w, charge[:WINDOW],    color=BLUE,  alpha=0.8, label="Charge (MW)",    width=1)
-ax.bar(t_w, -discharge[:WINDOW], color=RED,  alpha=0.8, label="Discharge (MW)", width=1)
-ax.axhline(0, color="black", linewidth=0.5)
-ax.set_ylabel("Power (MW)")
-ax.legend(fontsize=8, loc="upper right")
+ax.bar(t_w,  charge[:WINDOW],    color=TEAL, alpha=0.85, label="Charge (MW)",    width=1)
+ax.bar(t_w, -discharge[:WINDOW], color=PURPLE, alpha=0.85, label="Discharge (MW)", width=1)
+ax.axhline(0, color=BORDER, linewidth=0.8)
+ax.set_ylabel("Power (MW)", color=MGRAY, fontsize=8)
+ax.set_title("Charge / Discharge Schedule", fontsize=9, color=DPURPLE, fontweight="bold", loc="left")
+ax.legend(fontsize=7.5, loc="upper right")
 
 # SoC
 ax = axes[2]
-ax.fill_between(t_w, soc[:WINDOW], alpha=0.3, color=GREEN)
-ax.plot(t_w, soc[:WINDOW], color=GREEN, linewidth=1.2, label="State of Charge")
-ax.axhline(capacity, color=GRAY, linewidth=0.8, linestyle=":", label=f"Capacity ({capacity} MWh)")
-ax.set_ylabel("SoC (MWh)")
-ax.set_xlabel("Hour of year")
-ax.legend(fontsize=8, loc="upper right")
+ax.fill_between(t_w, soc[:WINDOW], alpha=0.18, color=GREEN)
+ax.plot(t_w, soc[:WINDOW], color=GREEN, linewidth=1.5, label="State of Charge (MWh)")
+ax.axhline(capacity, color=MGRAY, linewidth=0.8, linestyle=":", label=f"Capacity ({capacity} MWh)")
+ax.set_ylabel("SoC (MWh)", color=MGRAY, fontsize=8)
+ax.set_xlabel("Hour of year", color=MGRAY, fontsize=8)
+ax.set_title("State of Charge", fontsize=9, color=DPURPLE, fontweight="bold", loc="left")
+ax.legend(fontsize=7.5, loc="upper right")
 
-plt.tight_layout()
 path1 = OUT_DIR / "dispatch_snapshot.png"
-fig.savefig(path1, bbox_inches="tight")
+fig.savefig(path1, bbox_inches="tight", facecolor=LGRAY)
 plt.close()
 print(f"Saved: {path1}")
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Figure 2 — Annual cumulative revenue + price distribution
+# Figure 2 — Annual summary
 # ─────────────────────────────────────────────────────────────────────────────
-fig, axes = plt.subplots(1, 2, figsize=(12, 4))
-fig.suptitle("Annual Performance Summary", fontsize=14, fontweight="bold")
+fig, axes = card_fig(1, 2, (13, 4.5), "Annual Performance Summary")
+fig.subplots_adjust(wspace=0.35, left=0.08, right=0.97, top=0.88, bottom=0.14)
 
 # Cumulative revenue
 ax = axes[0]
-ax.plot(hours, cumulative_rev / 1000, color=GREEN, linewidth=1.5)
-ax.fill_between(hours, cumulative_rev / 1000, alpha=0.15, color=GREEN)
-ax.set_xlabel("Hour of year")
-ax.set_ylabel("Cumulative Revenue (k€)")
-ax.set_title(f"Total: €{cumulative_rev[-1]:,.0f}")
+ax.plot(hours, cumulative_rev / 1000, color=PURPLE, linewidth=1.5)
+ax.fill_between(hours, cumulative_rev / 1000, alpha=0.12, color=PURPLE)
+ax.set_xlabel("Hour of year", color=MGRAY, fontsize=8)
+ax.set_ylabel("Cumulative Revenue (k€)", color=MGRAY, fontsize=8)
+ax.set_title(f"Total Annual Revenue: €{cumulative_rev[-1]:,.0f}",
+             fontsize=9, color=DPURPLE, fontweight="bold", loc="left")
 
-# Price histogram with charge/discharge zones
+# Price distribution
 ax = axes[1]
-ax.hist(prices, bins=80, color=GRAY, alpha=0.6, label="All hours")
-charge_prices    = prices[charge > 0.01]
-discharge_prices = prices[discharge > 0.01]
-ax.hist(charge_prices,    bins=40, color=BLUE, alpha=0.7, label="Charge hours")
-ax.hist(discharge_prices, bins=40, color=RED,  alpha=0.7, label="Discharge hours")
-ax.set_xlabel("Price (EUR/MWh)")
-ax.set_ylabel("Hours")
-ax.set_title("Price Distribution by Operation Mode")
-ax.legend(fontsize=8)
+ax.hist(prices, bins=80, color=MGRAY, alpha=0.4, label="All hours")
+ax.hist(prices[charge > 0.01],    bins=40, color=TEAL,   alpha=0.8, label="Charge hours")
+ax.hist(prices[discharge > 0.01], bins=40, color=PURPLE, alpha=0.8, label="Discharge hours")
+ax.set_xlabel("Price (EUR/MWh)", color=MGRAY, fontsize=8)
+ax.set_ylabel("Hours per year", color=MGRAY, fontsize=8)
+ax.set_title("Price Distribution by Operation Mode",
+             fontsize=9, color=DPURPLE, fontweight="bold", loc="left")
+ax.legend(fontsize=7.5)
 
-plt.tight_layout()
 path2 = OUT_DIR / "annual_summary.png"
-fig.savefig(path2, bbox_inches="tight")
+fig.savefig(path2, bbox_inches="tight", facecolor=LGRAY)
 plt.close()
 print(f"Saved: {path2}")
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Figure 3 — Monthly revenue bar chart
+# Figure 3 — Monthly revenue
 # ─────────────────────────────────────────────────────────────────────────────
-month_hours = [744, 672, 744, 720, 744, 720, 744, 744, 720, 744, 720, 744]
-month_names = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
 monthly_rev = []
 start = 0
 for h in month_hours:
     monthly_rev.append(revenue_per_hour[start:start+h].sum())
     start += h
 
-fig, ax = plt.subplots(figsize=(10, 4))
-colors = [GREEN if r > 0 else RED for r in monthly_rev]
-bars = ax.bar(month_names, [r/1000 for r in monthly_rev], color=colors, alpha=0.85, edgecolor="white")
-ax.axhline(0, color="black", linewidth=0.5)
-ax.set_ylabel("Revenue (k€)")
-ax.set_title("Monthly Arbitrage Revenue", fontsize=13, fontweight="bold")
+fig, ax = plt.subplots(figsize=(12, 4.5))
+fig.patch.set_facecolor(LGRAY)
+ax.set_facecolor("white")
+fig.patches.append(
+    mpatches.FancyBboxPatch(
+        (0.02, 0.96), 0.96, 0.008,
+        boxstyle="square,pad=0",
+        transform=fig.transFigure,
+        color=PURPLE, zorder=10, clip_on=False,
+    )
+)
+
+colors = [GREEN if r >= 0 else RED for r in monthly_rev]
+bars = ax.bar(month_names, [r/1000 for r in monthly_rev],
+              color=colors, alpha=0.88, edgecolor="white", linewidth=0.5)
+ax.axhline(0, color=BORDER, linewidth=0.8)
+ax.set_ylabel("Revenue (k€)", color=MGRAY, fontsize=8)
+ax.set_title("Monthly Arbitrage Revenue", fontsize=12, fontweight="bold",
+             color=DARK, pad=12)
+ax.tick_params(colors=MGRAY)
+for spine in ax.spines.values():
+    spine.set_edgecolor(BORDER)
+
 for bar, val in zip(bars, monthly_rev):
-    ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.02,
-            f"€{val:,.0f}", ha="center", va="bottom", fontsize=7.5)
+    ypos = bar.get_height() + (0.015 if val >= 0 else -0.08)
+    ax.text(bar.get_x() + bar.get_width()/2, ypos,
+            f"€{val:,.0f}", ha="center", va="bottom", fontsize=7.5, color=DARK)
+
 plt.tight_layout()
 path3 = OUT_DIR / "monthly_revenue.png"
-fig.savefig(path3, bbox_inches="tight")
+fig.savefig(path3, bbox_inches="tight", facecolor=LGRAY)
 plt.close()
 print(f"Saved: {path3}")
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Figure 4 — RFNBO compliance comparison
+# Figure 4 — RFNBO compliance
 # ─────────────────────────────────────────────────────────────────────────────
-
-# Simulate RFNBO-gated schedule: block charging when price > 20 EUR/MWh
-soc_rfnbo      = np.zeros(8760)
-charge_rfnbo   = np.zeros(8760)
+soc_rfnbo       = np.zeros(8760)
+charge_rfnbo    = np.zeros(8760)
 discharge_rfnbo = np.zeros(8760)
-soc_rfnbo[0]  = capacity * 0.5
+soc_rfnbo[0]   = capacity * 0.5
 
 for t in range(1, 8760):
     prev = soc_rfnbo[t - 1]
-    if prices[t] < 20 and prev < capacity - 0.1:          # RFNBO gate: ≤20 only
+    if prices[t] < 20 and prev < capacity - 0.1:
         c = min(max_power, (capacity - prev) / sqrt_eff)
         charge_rfnbo[t] = c
         soc_rfnbo[t] = prev + c * sqrt_eff
@@ -189,11 +249,10 @@ for t in range(1, 8760):
     else:
         soc_rfnbo[t] = prev
 
-rev_rfnbo     = prices * (discharge_rfnbo * sqrt_eff - charge_rfnbo / sqrt_eff)
-cumrev_rfnbo  = np.cumsum(rev_rfnbo)
-cumrev_std    = np.cumsum(revenue_per_hour)
+rev_rfnbo    = prices * (discharge_rfnbo * sqrt_eff - charge_rfnbo / sqrt_eff)
+cumrev_rfnbo = np.cumsum(rev_rfnbo)
+cumrev_std   = np.cumsum(revenue_per_hour)
 
-# Monthly breakdown for both
 monthly_std   = []
 monthly_rfnbo = []
 start = 0
@@ -202,64 +261,60 @@ for h in month_hours:
     monthly_rfnbo.append(rev_rfnbo[start:start+h].sum())
     start += h
 
-fig, axes = plt.subplots(1, 3, figsize=(15, 4))
-fig.suptitle("RFNBO Additionality Compliance — Impact Analysis", fontsize=13, fontweight="bold")
+fig, axes = card_fig(1, 3, (15, 4.5), "RFNBO Additionality Compliance — Impact Analysis")
+fig.subplots_adjust(wspace=0.38, left=0.07, right=0.97, top=0.88, bottom=0.18)
 
-# Panel 1: Cumulative revenue comparison
+# Panel 1: Cumulative revenue
 ax = axes[0]
-ax.plot(hours, cumrev_std   / 1000, color=BLUE,  linewidth=1.5, label="Unconstrained")
-ax.plot(hours, cumrev_rfnbo / 1000, color=GREEN, linewidth=1.5, linestyle="--", label="RFNBO compliant")
-ax.fill_between(hours,
-                cumrev_std / 1000,
-                cumrev_rfnbo / 1000,
-                alpha=0.15, color=RED, label="Revenue penalty")
-ax.set_xlabel("Hour of year")
-ax.set_ylabel("Cumulative Revenue (k€)")
-ax.set_title("Cumulative Revenue")
-ax.legend(fontsize=8)
+ax.plot(hours, cumrev_std   / 1000, color=PURPLE, linewidth=1.5, label="Unconstrained")
+ax.plot(hours, cumrev_rfnbo / 1000, color=GREEN,  linewidth=1.5, linestyle="--", label="RFNBO compliant")
+ax.fill_between(hours, cumrev_std / 1000, cumrev_rfnbo / 1000,
+                alpha=0.12, color=RED, label="Revenue penalty")
+ax.set_xlabel("Hour of year", color=MGRAY, fontsize=8)
+ax.set_ylabel("Cumulative Revenue (k€)", color=MGRAY, fontsize=8)
+ax.set_title("Cumulative Revenue", fontsize=9, color=DPURPLE, fontweight="bold", loc="left")
+ax.legend(fontsize=7.5)
 
 # Panel 2: Monthly comparison
 ax = axes[1]
 x = np.arange(len(month_names))
 w = 0.38
-ax.bar(x - w/2, [r/1000 for r in monthly_std],    width=w, color=BLUE,  alpha=0.85, label="Unconstrained")
-ax.bar(x + w/2, [r/1000 for r in monthly_rfnbo],  width=w, color=GREEN, alpha=0.85, label="RFNBO compliant")
+ax.bar(x - w/2, [r/1000 for r in monthly_std],   width=w, color=PURPLE, alpha=0.85, label="Unconstrained")
+ax.bar(x + w/2, [r/1000 for r in monthly_rfnbo],  width=w, color=GREEN,  alpha=0.85, label="RFNBO compliant")
 ax.set_xticks(x)
-ax.set_xticklabels(month_names, fontsize=8)
-ax.set_ylabel("Revenue (k€)")
-ax.set_title("Monthly Comparison")
-ax.legend(fontsize=8)
+ax.set_xticklabels(month_names, fontsize=7.5, color=MGRAY)
+ax.set_ylabel("Revenue (k€)", color=MGRAY, fontsize=8)
+ax.set_title("Monthly Comparison", fontsize=9, color=DPURPLE, fontweight="bold", loc="left")
+ax.legend(fontsize=7.5)
 
-# Panel 3: Charging hours blocked by RFNBO gate
+# Panel 3: Blocked charging by hour
 ax = axes[2]
 rfnbo_threshold = 20.0
 blocked   = (prices > rfnbo_threshold) & (charge > 0.01)
 unblocked = (prices <= rfnbo_threshold) & (charge > 0.01)
 hour_of_day_arr = hours % 24
-
 blocked_counts   = np.bincount(hour_of_day_arr[blocked],   minlength=24)
 unblocked_counts = np.bincount(hour_of_day_arr[unblocked], minlength=24)
 
-ax.bar(range(24), unblocked_counts, color=GREEN,  alpha=0.85, label="Allowed (≤20 €/MWh)")
-ax.bar(range(24), blocked_counts,   bottom=unblocked_counts,
-       color=RED, alpha=0.75, label="Blocked by RFNBO gate")
-ax.set_xlabel("Hour of day")
-ax.set_ylabel("Charge events (hours/year)")
-ax.set_title("RFNBO Gate — Blocked Charging by Hour")
-ax.legend(fontsize=8)
+ax.bar(range(24), unblocked_counts, color=GREEN, alpha=0.85, label="Allowed (≤20 €/MWh)")
+ax.bar(range(24), blocked_counts, bottom=unblocked_counts, color=RED, alpha=0.75, label="Blocked by RFNBO gate")
+ax.set_xlabel("Hour of day", color=MGRAY, fontsize=8)
+ax.set_ylabel("Charge events (h/year)", color=MGRAY, fontsize=8)
+ax.set_title("RFNBO Gate — Blocked Charging by Hour",
+             fontsize=9, color=DPURPLE, fontweight="bold", loc="left")
+ax.legend(fontsize=7.5)
 
 penalty     = cumrev_std[-1] - cumrev_rfnbo[-1]
 penalty_pct = penalty / cumrev_std[-1] * 100
-fig.text(0.5, -0.02,
+fig.text(0.5, 0.02,
          f"Revenue penalty from RFNBO compliance: €{penalty:,.0f}  ({penalty_pct:.1f}%)",
          ha="center", fontsize=10, color=RED, fontweight="bold")
 
-plt.tight_layout()
 path4 = OUT_DIR / "rfnbo_analysis.png"
-fig.savefig(path4, bbox_inches="tight")
+fig.savefig(path4, bbox_inches="tight", facecolor=LGRAY)
 plt.close()
 print(f"Saved: {path4}")
 
 print("\nAll plots saved to docs/images/")
-print("Annual revenue (simulated):", f"€{cumulative_rev[-1]:,.0f}")
+print(f"Annual revenue (simulated): €{cumulative_rev[-1]:,.0f}")
 print(f"RFNBO penalty: €{penalty:,.0f} ({penalty_pct:.1f}%)")
