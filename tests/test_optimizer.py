@@ -11,7 +11,12 @@ import numpy as np
 import pytest
 
 from bess_arbitrage.loader import load_prices
-from bess_arbitrage.optimizer import optimize_bess_arbitrage
+from bess_arbitrage.optimizer import optimize_bess_arbitrage, _PYOMO_OK
+
+# Skip all solver-dependent tests if Pyomo / HiGHS are not installed
+requires_solver = pytest.mark.skipif(
+    not _PYOMO_OK, reason="Pyomo not installed"
+)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -72,6 +77,7 @@ class TestLoader:
 
 # ── Optimizer tests ───────────────────────────────────────────────────────────
 
+@requires_solver
 @pytest.fixture(scope="module")
 def basic_result():
     """Solve a small fixed-sizing problem once and reuse across tests."""
