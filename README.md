@@ -44,6 +44,8 @@ A Python toolkit for BESS dispatch optimisation covering three use cases:
 | p90 empirical coverage | 82.8% (target 90%) |
 | Revenue capture vs perfect foresight | 77.0% |
 
+> **Calibration note:** the p90 quantile covers 82.8% of hold-out hours against a 90% target, so the upper bound is about 7 points too tight. The intervals are reported as measured and have not been recalibrated; see the reliability diagram below.
+
 ---
 
 ## Plots

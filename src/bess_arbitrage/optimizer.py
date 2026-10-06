@@ -91,7 +91,8 @@ def make_industrial_load(
         hod = h % 24
         shape = weekday_shape[hod] if dow < 5 else weekend_shape[hod]
         noise = rng.normal(0, 0.03)
-        profile[h] = np.clip(base_mw + (peak_mw - base_mw) * shape + noise, base_mw * 0.8, peak_mw * 1.05)
+        raw = base_mw + (peak_mw - base_mw) * shape + noise
+        profile[h] = np.clip(raw, base_mw * 0.8, peak_mw * 1.05)
 
     return profile
 
@@ -434,8 +435,12 @@ def optimize_peak_shaving(
 
     # Mutex: no simultaneous charge + discharge
     big_m = power * 2
-    m.mutex_charge    = Constraint(m.T, rule=lambda m, t: m.charge[t]    <= big_m * m.is_charging[t])
-    m.mutex_discharge = Constraint(m.T, rule=lambda m, t: m.discharge[t] <= big_m * (1 - m.is_charging[t]))
+    m.mutex_charge = Constraint(
+        m.T, rule=lambda m, t: m.charge[t] <= big_m * m.is_charging[t]
+    )
+    m.mutex_discharge = Constraint(
+        m.T, rule=lambda m, t: m.discharge[t] <= big_m * (1 - m.is_charging[t])
+    )
 
     # Solve
     solver = SolverFactory("highs")
