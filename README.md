@@ -255,6 +255,12 @@ On clean data (S0) the robustness layer changes little: A (80.9%), B (84.3%), an
 ### Forecast calibration — reliability diagram + CRPS
 ![Forecast Calibration](docs/images/forecast_calibration.png)
 
+### Walk-forward backtest — revenue capture and MAE
+![Walk-forward backtest](docs/images/backtest_monthly.png)
+
+### Robustness evaluation — S0 vs S1, strategies A / B / C
+![Robustness evaluation](docs/images/robustness.png)
+
 ---
 
 ## Features
