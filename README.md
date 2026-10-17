@@ -18,6 +18,8 @@ A Python toolkit for BESS dispatch optimisation covering three use cases:
 
 ![Dispatch & Market Prices](docs/images/dispatch_snapshot.png)
 
+![Monthly Revenue](docs/images/monthly_revenue.png)
+
 | Parameter | Unconstrained | RFNBO Compliant |
 |---|---|---|
 | Annual Revenue | €289,981 | €194,709 |
@@ -239,31 +241,6 @@ Run [`examples/06_robustness.py`](examples/06_robustness.py) to reproduce.
 On clean data (S0) the robustness layer changes little: A (80.9%), B (84.3%), and C (87.2%) replicate the backtest pattern — persistence still captures the most revenue and GBM with fallback sits in between. On faulty data (S1) the checks and imputation matter: raw GBM (A) drops to 67.6% as corrupt lag features degrade the forecast, while the robustness layer (B) recovers to 83.2% by switching ~52% of days to cleaned persistence. Cleaned persistence alone (C, 85.3%) still edges out B by 2.1 pp overall, so the fallback **does not outperform simply using persistence throughout** — it only reduces the gap caused by faults.
 
 **Limitations:** single fault seed; monthly (not daily) planning horizon; no intra-month re-forecasting.
-
----
-
-## Plots
-
-1. **Arbitrage dispatch — Week 1**
-   ![Dispatch & Market Prices](docs/images/dispatch_snapshot.png)
-
-2. **Monthly arbitrage revenue**
-   ![Monthly Revenue](docs/images/monthly_revenue.png)
-
-3. **Peak shaving — industrial load vs grid import**
-   ![Peak Shaving](docs/images/peak_shaving.png)
-
-4. **Forecast accuracy and revenue capture**
-   ![Price Forecasting vs Perfect Foresight](docs/images/forecast_vs_perfect.png)
-
-5. **Forecast calibration — reliability diagram + CRPS**
-   ![Forecast Calibration](docs/images/forecast_calibration.png)
-
-6. **Walk-forward backtest — revenue capture and MAE**
-   ![Walk-forward backtest](docs/images/backtest_monthly.png)
-
-7. **Robustness evaluation — S0 vs S1, strategies A / B / C**
-   ![Robustness evaluation](docs/images/robustness.png)
 
 ---
 
