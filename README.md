@@ -48,6 +48,43 @@ A Python toolkit for BESS dispatch optimisation covering three use cases:
 
 ---
 
+## Forecast recalibration (CQR)
+
+Conformal Quantile Regression (CQR) adds a leakage-free post-hoc correction to the GBM quantile forecasts.
+
+### Data split
+
+| Segment | Hours | Period | Purpose |
+|---|---|---|---|
+| Train | 168 – 5 088 | Jan–Jul | Fit GBM models |
+| Calibration | 5 088 – 5 832 | August | Learn CQR offsets (never used to fit anything else) |
+| Test | 5 832 – 8 760 | Sep–Dec | Evaluate all variants |
+
+The calibration set is kept strictly separate from training and test. Offsets are learned on August and applied to Sep–Dec — no information from the test period is used anywhere.
+
+### Results — test period Sep–Dec 2023
+
+| Metric | (a) Uncalibrated | (b) Static CQR | (c) Rolling CQR |
+|---|---|---|---|
+| p10 coverage (target 10%) | 18.6% | 19.5% | 12.4% |
+| p90 coverage (target 90%) | 82.2% | 84.3% | 89.3% |
+| 80% interval coverage (target 80%) | 63.6% | 64.8% | 76.9% |
+| Mean interval width (EUR/MWh) | 45.51 | 46.91 | 64.46 |
+| Pinball loss p10 (EUR/MWh) | 5.268 | 5.331 | 4.989 |
+| Pinball loss p50 (EUR/MWh) | 10.618 | 10.563 | 10.618 |
+| Pinball loss p90 (EUR/MWh) | 5.235 | 5.095 | 4.886 |
+| CRPS (EUR/MWh) | 14.080 | 13.993 | 13.661 |
+
+Numbers are as measured; nothing was tuned on the test period.
+
+**Interpretation:** Static CQR (August offsets, +0.72 / +1.97 EUR/MWh for p10/p90) closes only 2 of the 8 percentage-point gap in p90 coverage. The 30-day rolling variant reaches 89.3% p90 coverage — close to but still 0.7 points short of the 90% target — while also improving CRPS from 14.08 to 13.66 EUR/MWh. The p10 quantile remains above the 10% target in all variants; the model's lower bound is systematically too pessimistic and CQR only partially corrects it. Interval widths widen with calibration (especially rolling), which is the expected cost of better coverage.
+
+![Forecast Recalibration](docs/images/forecast_recalibration.png)
+
+Run [`examples/04_recalibration.py`](examples/04_recalibration.py) to reproduce these results.
+
+---
+
 ## Plots
 
 ### Arbitrage dispatch — Week 1
