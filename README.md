@@ -85,6 +85,85 @@ Run [`examples/04_recalibration.py`](examples/04_recalibration.py) to reproduce 
 
 ---
 
+## Walk-forward backtest
+
+Expanding-window monthly re-training over March–December 2023. For each test month *m*:
+
+1. Train the GBM forecaster on hours 168 … *start\_of(m)* — strictly no look-ahead.
+2. Produce 24h-ahead p10/p50/p90 forecasts for month *m*.
+3. Naive persistence baseline: price\[*t*−24\] (same hour yesterday).
+4. Run three MILP optimisations (8 MWh / 2 MW / η = 0.92 / SoC₀ = 0.5), all **evaluated on actual prices**: perfect foresight, GBM p50, persistence.
+
+### Data split
+
+| Segment | Hours | Period | Purpose |
+|---|---|---|---|
+| Train (expanding) | 168 → *start\_of(m)* | Jan–*prev. month* | Fit GBM models |
+| Test | *start\_of(m)* → *end\_of(m)* | Month *m* | Evaluate forecast + dispatch |
+| First test month | 1 416 | March | GBM trained on Jan–Feb only |
+| Last test month | 8 016 | December | GBM trained on Jan–Nov |
+
+### Forecast quality (GBM p50 vs actuals) — Mar–Dec 2023
+
+All metrics in €/MWh except coverage (%). Overall row weighted by month length.
+
+| Month | MAE | RMSE | p90 cov% | 80% cov% | CRPS | MAE pers | RMSE pers |
+|---|---|---|---|---|---|---|---|
+| Mar | 33.8 | 44.5 | 88.2 | 58.3 | 23.34 | 26.7 | 40.8 |
+| Apr | 25.9 | 34.6 | 88.5 | 70.7 | 16.25 | 24.8 | 35.3 |
+| May | 26.3 | 34.2 | 78.2 | 57.1 | 17.37 | 26.5 | 37.6 |
+| Jun | 19.1 | 23.7 | 88.2 | 81.1 | 11.39 | 20.6 | 29.1 |
+| Jul | 14.3 | 19.6 | 90.7 | 76.9 | 9.25 | 20.8 | 30.2 |
+| Aug | 11.5 | 16.3 | 87.5 | 78.2 | 7.77 | 19.2 | 29.1 |
+| Sep | 18.0 | 24.9 | 84.7 | 65.6 | 12.14 | 24.0 | 33.6 |
+| Oct | 22.3 | 29.4 | 82.1 | 62.0 | 14.90 | 31.3 | 41.6 |
+| Nov | 20.4 | 27.3 | 77.6 | 64.3 | 13.34 | 25.2 | 33.5 |
+| Dec | 20.9 | 27.7 | 91.7 | 63.4 | 12.95 | 25.7 | 34.7 |
+| **Overall** | **21.3** | **29.3** | **85.8** | **67.7** | **13.88** | **24.5** | **34.8** |
+
+### Economic results (revenue evaluated on actual prices) — Mar–Dec 2023
+
+| Month | PF revenue | GBM revenue | Pers revenue | Capture GBM | Capture pers |
+|---|---|---|---|---|---|
+| Mar | €27,353 | €12,107 | €24,408 | 44.3% | 89.2% |
+| Apr | €29,514 | €23,754 | €27,537 | 80.5% | 93.3% |
+| May | €33,879 | €29,480 | €30,310 | 87.0% | 89.5% |
+| Jun | €28,047 | €24,836 | €24,906 | 88.6% | 88.8% |
+| Jul | €30,119 | €27,314 | €26,709 | 90.7% | 88.7% |
+| Aug | €28,255 | €26,536 | €25,715 | 93.9% | 91.0% |
+| Sep | €28,287 | €25,802 | €25,303 | 91.2% | 89.5% |
+| Oct | €26,223 | €21,230 | €21,929 | 81.0% | 83.6% |
+| Nov | €16,939 | €11,888 | €13,291 | 70.2% | 78.5% |
+| Dec | €13,078 | €8,653 | €9,426 | 66.2% | 72.1% |
+| **Overall** | **€261,695** | **€211,598** | **€229,535** | **80.9%** | **87.7%** |
+
+### Diebold–Mariano test (GBM p50 vs persistence, Mar–Dec, *n* = 306 days)
+
+H₁: GBM has lower expected loss than persistence (one-sided). Daily loss differentials, Newey–West lag = 1, HLN small-sample correction.
+
+| Metric | Abs loss | Sq loss |
+|---|---|---|
+| Mean loss — persistence | 24.475 €/MWh | 1 213.8 (€/MWh)² |
+| Mean loss — GBM p50 | 21.265 €/MWh | 857.4 (€/MWh)² |
+| DM statistic | 3.741 | 4.713 |
+| *p*-value (normal) | 0.0001 | < 0.0001 |
+| HLN statistic | 3.735 | 4.706 |
+| *p*-value (HLN, *t*₃₀₅) | 0.0001 | < 0.0001 |
+
+### Plot
+
+![Walk-forward backtest](docs/images/backtest_monthly.png)
+
+Run [`examples/05_backtest.py`](examples/05_backtest.py) to reproduce.
+
+### Interpretation
+
+GBM is highly significantly more accurate than persistence in point-forecast terms — DM *p* < 0.001 for both absolute and squared loss, with or without the HLN correction. That statistical advantage does **not** translate to better revenue capture: over Mar–Dec persistence (87.7%) outperforms GBM p50 (80.9%). GBM wins only in Jul (90.7% vs 88.7%) and Aug (93.9% vs 91.0%) — the months with the most training data. March is especially poor for GBM (44.3% vs 89.2%): with only ~1 250 training samples the model mis-forecasts the seasonal price structure enough to drive a badly timed dispatch schedule. GBM's 80% interval coverage averages 67.7%, well short of the 80% target; p90 coverage (85.8%) also falls below 90%.
+
+**Limitations:** monthly (not daily) re-training; single year of data (2023).
+
+---
+
 ## Plots
 
 ### Arbitrage dispatch — Week 1
