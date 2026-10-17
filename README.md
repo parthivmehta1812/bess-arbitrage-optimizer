@@ -164,6 +164,80 @@ GBM is highly significantly more accurate than persistence in point-forecast ter
 
 ---
 
+## Robustness and fallback
+
+Evaluates how plausibility checks, missing-data imputation, and a GBM confidence fallback affect revenue when price inputs are faulty. Single seed (42), monthly MILP planning horizon (one optimisation per month), no re-forecasting within the month.
+
+### Setup
+
+**Fault injection — scenario S1** (test-period hours 1416–8760 only):
+
+| Fault type | Hours injected | Share of test period |
+|---|---|---|
+| Missing (NaN blocks 2–24 h) | 376 | 5.1 % |
+| Spikes (value × 10) | 255 | 3.5 % |
+| Stuck values (runs 6–12 h) | 201 | 2.7 % |
+| Total imputed after cleaning | 762 | 10.4 % |
+
+**Strategies:**
+
+| Label | Description |
+|---|---|
+| A | GBM, no checks — naive forward-fill of NaN, no fallback |
+| B | GBM + check-and-flag + imputation + day-level confidence/imputation fallback |
+| C | Persistence (cleaned price[*t*−24]) — checks + imputation, no GBM |
+| D | Perfect foresight (actual prices) — benchmark |
+
+Fallback threshold *k* = 1.25, calibrated on Jan–Feb data only. Strategy D is scenario-independent (actual prices are always clean).
+
+### Revenue capture (% of perfect foresight) — Mar–Dec 2023
+
+**Scenario S0 — clean inputs**
+
+| Month | N-h | PF rev (€) | A cap% | A MAE | B cap% | B MAE | B fb% | C cap% | C MAE |
+|---|---|---|---|---|---|---|---|---|---|
+| Mar | 744 | 27 353 | 44.3 | 33.8 | 71.8 | 27.7 | 54.8 | 85.1 | 27.3 |
+| Apr | 720 | 29 514 | 80.5 | 25.9 | 89.6 | 22.0 | 40.0 | 93.2 | 24.4 |
+| May | 744 | 33 879 | 87.0 | 26.3 | 85.5 | 25.9 | 12.9 | 88.8 | 26.5 |
+| Jun | 720 | 28 047 | 88.6 | 19.1 | 87.7 | 20.6 | 36.7 | 88.8 | 20.6 |
+| Jul | 744 | 30 119 | 90.7 | 14.3 | 90.7 | 14.3 | 0.0 | 88.7 | 20.8 |
+| Aug | 744 | 28 255 | 93.9 | 11.5 | 93.2 | 13.5 | 9.7 | 91.0 | 19.1 |
+| Sep | 720 | 28 287 | 91.2 | 18.0 | 87.8 | 20.0 | 26.7 | 89.4 | 23.5 |
+| Oct | 744 | 26 223 | 81.0 | 22.3 | 84.5 | 28.3 | 51.6 | 83.6 | 31.2 |
+| Nov | 720 | 16 939 | 70.2 | 20.4 | 67.5 | 20.8 | 6.7 | 78.3 | 25.2 |
+| Dec | 744 | 13 078 | 66.2 | 20.9 | 67.9 | 21.5 | 29.0 | 72.9 | 25.3 |
+| **Overall** | **7 344** | **261 695** | **80.9** | **21.3** | **84.3** | **21.5** | **26.8** | **87.2** | **24.4** |
+
+**Scenario S1 — faulty inputs (seed=42)**
+
+| Month | N-h | NaN | Spk | Stk | Imp | A cap% | A MAE | B cap% | B MAE | B fb% | C cap% | C MAE |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Mar | 744 | 41 | 28 | 18 | 87 | 48.1 | 46.9 | 66.0 | 28.5 | 58.1 | 80.1 | 27.9 |
+| Apr | 720 | 38 | 47 | 34 | 114 | 71.5 | 33.8 | 92.1 | 24.2 | 76.7 | 93.1 | 25.1 |
+| May | 744 | 12 | 25 | 23 | 56 | 71.5 | 34.6 | 86.0 | 25.9 | 48.4 | 89.7 | 26.3 |
+| Jun | 720 | 31 | 14 | 9 | 45 | 74.3 | 24.4 | 89.8 | 18.2 | 33.3 | 88.8 | 20.1 |
+| Jul | 744 | 62 | 17 | 24 | 92 | 72.4 | 30.3 | 88.6 | 18.6 | 48.4 | 86.6 | 22.6 |
+| Aug | 744 | 4 | 23 | 10 | 31 | 82.0 | 18.0 | 91.9 | 13.9 | 19.4 | 90.1 | 19.3 |
+| Sep | 720 | 49 | 27 | 26 | 97 | 72.8 | 28.7 | 84.2 | 23.2 | 46.7 | 85.3 | 24.5 |
+| Oct | 744 | 61 | 43 | 49 | 122 | 63.5 | 42.3 | 83.9 | 31.6 | 96.8 | 84.5 | 32.1 |
+| Nov | 720 | 55 | 8 | 8 | 76 | 49.4 | 32.2 | 65.7 | 26.0 | 63.3 | 70.9 | 27.3 |
+| Dec | 744 | 23 | 23 | 0 | 42 | 53.1 | 26.3 | 65.7 | 22.0 | 32.3 | 67.0 | 26.7 |
+| **Overall** | **7 344** | **376** | **255** | **201** | **762** | **67.6** | **31.8** | **83.2** | **23.2** | **52.3** | **85.3** | **25.2** |
+
+### Plot
+
+![Robustness evaluation](docs/images/robustness.png)
+
+Run [`examples/06_robustness.py`](examples/06_robustness.py) to reproduce.
+
+### Interpretation
+
+On clean data (S0) the robustness layer changes little: A (80.9%), B (84.3%), and C (87.2%) replicate the backtest pattern — persistence still captures the most revenue and GBM with fallback sits in between. On faulty data (S1) the checks and imputation matter: raw GBM (A) drops to 67.6% as corrupt lag features degrade the forecast, while the robustness layer (B) recovers to 83.2% by switching ~52% of days to cleaned persistence. Cleaned persistence alone (C, 85.3%) still edges out B by 2.1 pp overall, so the fallback **does not outperform simply using persistence throughout** — it only reduces the gap caused by faults.
+
+**Limitations:** single fault seed; monthly (not daily) planning horizon; no intra-month re-forecasting.
+
+---
+
 ## Plots
 
 ### Arbitrage dispatch — Week 1
