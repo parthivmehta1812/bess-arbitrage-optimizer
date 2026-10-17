@@ -16,6 +16,8 @@ A Python toolkit for BESS dispatch optimisation covering three use cases:
 
 ### Arbitrage — 2 MW / 8 MWh battery, 2023 German ENTSO-E prices
 
+![Dispatch & Market Prices](docs/images/dispatch_snapshot.png)
+
 | Parameter | Unconstrained | RFNBO Compliant |
 |---|---|---|
 | Annual Revenue | €289,981 | €194,709 |
@@ -27,6 +29,8 @@ A Python toolkit for BESS dispatch optimisation covering three use cases:
 
 ### Peak Shaving — synthetic industrial factory load
 
+![Peak Shaving](docs/images/peak_shaving.png)
+
 | Metric | Value |
 |---|---|
 | Peak demand without BESS | 2.30 MW |
@@ -35,6 +39,8 @@ A Python toolkit for BESS dispatch optimisation covering three use cases:
 | Battery | 2 MW / 8 MWh |
 
 ### Price Forecasting — Sep–Dec hold-out
+
+![Price Forecasting vs Perfect Foresight](docs/images/forecast_vs_perfect.png)
 
 | Metric | Value |
 |---|---|
@@ -64,6 +70,10 @@ The calibration set is kept strictly separate from training and test. Offsets ar
 
 ### Results — test period Sep–Dec 2023
 
+![Forecast Recalibration](docs/images/forecast_recalibration.png)
+
+![Forecast Calibration](docs/images/forecast_calibration.png)
+
 | Metric | (a) Uncalibrated | (b) Static CQR | (c) Rolling CQR |
 |---|---|---|---|
 | p10 coverage (target 10%) | 18.6% | 19.5% | 12.4% |
@@ -78,8 +88,6 @@ The calibration set is kept strictly separate from training and test. Offsets ar
 Numbers are as measured; nothing was tuned on the test period.
 
 **Interpretation:** Static CQR (August offsets, +0.72 / +1.97 EUR/MWh for p10/p90) closes only 2 of the 8 percentage-point gap in p90 coverage. The 30-day rolling variant reaches 89.3% p90 coverage — close to but still 0.7 points short of the 90% target — while also improving CRPS from 14.08 to 13.66 EUR/MWh. The p10 quantile remains above the 10% target in all variants; the model's lower bound is systematically too pessimistic and CQR only partially corrects it. Interval widths widen with calibration (especially rolling), which is the expected cost of better coverage.
-
-![Forecast Recalibration](docs/images/forecast_recalibration.png)
 
 Run [`examples/04_recalibration.py`](examples/04_recalibration.py) to reproduce these results.
 
@@ -102,6 +110,10 @@ Expanding-window monthly re-training over March–December 2023. For each test m
 | Test | *start\_of(m)* → *end\_of(m)* | Month *m* | Evaluate forecast + dispatch |
 | First test month | 1 416 | March | GBM trained on Jan–Feb only |
 | Last test month | 8 016 | December | GBM trained on Jan–Nov |
+
+![Walk-forward backtest](docs/images/backtest_monthly.png)
+
+Run [`examples/05_backtest.py`](examples/05_backtest.py) to reproduce.
 
 ### Forecast quality (GBM p50 vs actuals) — Mar–Dec 2023
 
@@ -150,12 +162,6 @@ H₁: GBM has lower expected loss than persistence (one-sided). Daily loss diffe
 | HLN statistic | 3.735 | 4.706 |
 | *p*-value (HLN, *t*₃₀₅) | 0.0001 | < 0.0001 |
 
-### Plot
-
-![Walk-forward backtest](docs/images/backtest_monthly.png)
-
-Run [`examples/05_backtest.py`](examples/05_backtest.py) to reproduce.
-
 ### Interpretation
 
 GBM is highly significantly more accurate than persistence in point-forecast terms — DM *p* < 0.001 for both absolute and squared loss, with or without the HLN correction. That statistical advantage does **not** translate to better revenue capture: over Mar–Dec persistence (87.7%) outperforms GBM p50 (80.9%). GBM wins only in Jul (90.7% vs 88.7%) and Aug (93.9% vs 91.0%) — the months with the most training data. March is especially poor for GBM (44.3% vs 89.2%): with only ~1 250 training samples the model mis-forecasts the seasonal price structure enough to drive a badly timed dispatch schedule. GBM's 80% interval coverage averages 67.7%, well short of the 80% target; p90 coverage (85.8%) also falls below 90%.
@@ -190,6 +196,10 @@ Evaluates how plausibility checks, missing-data imputation, and a GBM confidence
 
 Fallback threshold *k* = 1.25, calibrated on Jan–Feb data only. Strategy D is scenario-independent (actual prices are always clean).
 
+![Robustness evaluation](docs/images/robustness.png)
+
+Run [`examples/06_robustness.py`](examples/06_robustness.py) to reproduce.
+
 ### Revenue capture (% of perfect foresight) — Mar–Dec 2023
 
 **Scenario S0 — clean inputs**
@@ -223,12 +233,6 @@ Fallback threshold *k* = 1.25, calibrated on Jan–Feb data only. Strategy D is 
 | Nov | 720 | 55 | 8 | 8 | 76 | 49.4 | 32.2 | 65.7 | 26.0 | 63.3 | 70.9 | 27.3 |
 | Dec | 744 | 23 | 23 | 0 | 42 | 53.1 | 26.3 | 65.7 | 22.0 | 32.3 | 67.0 | 26.7 |
 | **Overall** | **7 344** | **376** | **255** | **201** | **762** | **67.6** | **31.8** | **83.2** | **23.2** | **52.3** | **85.3** | **25.2** |
-
-### Plot
-
-![Robustness evaluation](docs/images/robustness.png)
-
-Run [`examples/06_robustness.py`](examples/06_robustness.py) to reproduce.
 
 ### Interpretation
 
