@@ -240,26 +240,26 @@ On clean data (S0) the robustness layer changes little: A (80.9%), B (84.3%), an
 
 ## Plots
 
-### Arbitrage dispatch — Week 1
-![Dispatch & Market Prices](docs/images/dispatch_snapshot.png)
+1. **Arbitrage dispatch — Week 1**
+   ![Dispatch & Market Prices](docs/images/dispatch_snapshot.png)
 
-### Monthly arbitrage revenue
-![Monthly Revenue](docs/images/monthly_revenue.png)
+2. **Monthly arbitrage revenue**
+   ![Monthly Revenue](docs/images/monthly_revenue.png)
 
-### Peak shaving — industrial load vs grid import
-![Peak Shaving](docs/images/peak_shaving.png)
+3. **Peak shaving — industrial load vs grid import**
+   ![Peak Shaving](docs/images/peak_shaving.png)
 
-### Forecast accuracy and revenue capture
-![Price Forecasting vs Perfect Foresight](docs/images/forecast_vs_perfect.png)
+4. **Forecast accuracy and revenue capture**
+   ![Price Forecasting vs Perfect Foresight](docs/images/forecast_vs_perfect.png)
 
-### Forecast calibration — reliability diagram + CRPS
-![Forecast Calibration](docs/images/forecast_calibration.png)
+5. **Forecast calibration — reliability diagram + CRPS**
+   ![Forecast Calibration](docs/images/forecast_calibration.png)
 
-### Walk-forward backtest — revenue capture and MAE
-![Walk-forward backtest](docs/images/backtest_monthly.png)
+6. **Walk-forward backtest — revenue capture and MAE**
+   ![Walk-forward backtest](docs/images/backtest_monthly.png)
 
-### Robustness evaluation — S0 vs S1, strategies A / B / C
-![Robustness evaluation](docs/images/robustness.png)
+7. **Robustness evaluation — S0 vs S1, strategies A / B / C**
+   ![Robustness evaluation](docs/images/robustness.png)
 
 ---
 
