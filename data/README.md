@@ -22,6 +22,12 @@ with open("my_prices.csv", "rb") as f:
 3. Export as CSV
 4. Pass the downloaded file via `price_bytes`
 
+> **Note on resolution for newer data:** The coupled day-ahead market switched
+> to 15-minute products on 1 October 2025, so data downloaded after that date
+> will have resolution **PT15M** (four values per hour).  You would need to
+> aggregate to hourly (e.g. mean of four 15-min slots) before passing the file
+> to this package, or build a 15-minute model.
+
 ## File format requirements
 
 | Column | Type | Unit |

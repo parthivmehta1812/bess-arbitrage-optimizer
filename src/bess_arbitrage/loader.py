@@ -25,7 +25,7 @@ def load_prices(price_bytes: bytes | None = None) -> np.ndarray:
     Parameters
     ----------
     price_bytes : raw bytes from an uploaded CSV or XLSX file, or None to use
-                  the bundled sample (2024 German ENTSO-E subset).
+                  the bundled sample (2023 German ENTSO-E dataset).
 
     Returns
     -------
