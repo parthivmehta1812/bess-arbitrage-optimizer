@@ -89,7 +89,7 @@ The calibration set is kept strictly separate from training and test. Offsets ar
 
 Numbers are as measured; nothing was tuned on the test period.
 
-**Interpretation:** Static CQR (August offsets, +0.72 / +1.97 EUR/MWh for p10/p90) closes only 2 of the 8 percentage-point gap in p90 coverage. The 30-day rolling variant reaches 89.3% p90 coverage — close to but still 0.7 points short of the 90% target — while also improving CRPS from 14.08 to 13.66 EUR/MWh. The p10 quantile remains above the 10% target in all variants; the model's lower bound is systematically too pessimistic and CQR only partially corrects it. Interval widths widen with calibration (especially rolling), which is the expected cost of better coverage.
+**Interpretation:** Static CQR (August offsets, +0.72 / +1.97 EUR/MWh for p10/p90) closes only 2 of the 8 percentage-point gap in p90 coverage. The 30-day rolling variant reaches 89.3% p90 coverage — close to but still 0.7 points short of the 90% target — while also improving CRPS from 14.08 to 13.66 EUR/MWh. The p10 quantile exceeds the 10% target in all variants (18.6%, 19.5%, 12.4%): actual prices fall below the lower bound more often than the target, meaning the lower bound is set too high (not wide enough on the downside), and CQR only partially corrects it. Interval widths widen with calibration (especially rolling), which is the expected cost of better coverage.
 
 Run [`examples/04_recalibration.py`](examples/04_recalibration.py) to reproduce these results.
 
