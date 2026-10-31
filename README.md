@@ -44,6 +44,8 @@ A Python toolkit for BESS dispatch optimisation covering three use cases:
 
 ![Price Forecasting vs Perfect Foresight](docs/images/forecast_vs_perfect.png)
 
+GBM trained on Jan–Jul (hours 168–5 088), evaluated on Sep–Dec (hours 5 832–8 760).
+
 | Metric | Value |
 |---|---|
 | MAE | 25.1 €/MWh |
@@ -52,25 +54,13 @@ A Python toolkit for BESS dispatch optimisation covering three use cases:
 | p90 empirical coverage | 80.3% (target 90%) |
 | Revenue capture vs perfect foresight | 82.9% |
 
-> **Calibration note:** the p90 quantile covers 80.3% of hold-out hours against a 90% target, so the upper bound is about 10 points too tight. The intervals are reported as measured and have not been recalibrated; see the reliability diagram below.
+The p90 quantile is ~10 points too tight; the p10 lower bound is set too high (prices fall below it more often than the 10% target). See CQR section below.
 
 ---
 
 ## Forecast recalibration (CQR)
 
-Conformal Quantile Regression (CQR) adds a leakage-free post-hoc correction to the GBM quantile forecasts.
-
-### Data split
-
-| Segment | Hours | Period | Purpose |
-|---|---|---|---|
-| Train | 168 – 5 088 | Jan–Jul | Fit GBM models |
-| Calibration | 5 088 – 5 832 | August | Learn CQR offsets (never used to fit anything else) |
-| Test | 5 832 – 8 760 | Sep–Dec | Evaluate all variants |
-
-The calibration set is kept strictly separate from training and test. Offsets are learned on August and applied to Sep–Dec — no information from the test period is used anywhere.
-
-### Results — test period Sep–Dec 2023
+Conformal Quantile Regression adds a leakage-free post-hoc correction. Offsets learned on August (calibration set), applied to Sep–Dec (test set) — no test-period information used anywhere.
 
 ![Forecast Recalibration](docs/images/forecast_recalibration.png)
 
@@ -82,171 +72,71 @@ The calibration set is kept strictly separate from training and test. Offsets ar
 | p90 coverage (target 90%) | 80.3% | 85.4% | 89.5% |
 | 80% interval coverage (target 80%) | 57.6% | 62.1% | 75.7% |
 | Mean interval width (EUR/MWh) | 49.60 | 53.94 | 74.82 |
-| Pinball loss p10 (EUR/MWh) | 6.725 | 6.828 | 6.124 |
-| Pinball loss p50 (EUR/MWh) | 12.527 | 12.527 | 12.527 |
-| Pinball loss p90 (EUR/MWh) | 6.217 | 5.860 | 5.795 |
 | CRPS (EUR/MWh) | 16.979 | 16.810 | 16.297 |
 
-Numbers are as measured; nothing was tuned on the test period.
+Static CQR offsets: +0.81 / +5.15 EUR/MWh for p10/p90. Rolling CQR reaches 89.5% p90 coverage (0.5 pp short of target) and reduces CRPS from 16.98 to 16.30 EUR/MWh at the cost of wider intervals. Numbers as measured; nothing tuned on the test period.
 
-**Interpretation:** Static CQR (August offsets, +0.81 / +5.15 EUR/MWh for p10/p90) improves p90 coverage by 5 points but barely moves CRPS. The 30-day rolling variant reaches 89.5% p90 coverage — close to but still 0.5 points short of the 90% target — while also improving CRPS from 16.98 to 16.30 EUR/MWh. The p10 quantile exceeds the 10% target in all variants (22.7%, 23.3%, 13.8%): actual prices fall below the lower bound more often than the target, meaning the lower bound is set too high (not wide enough on the downside), and CQR only partially corrects it. Interval widths widen with calibration (especially rolling), which is the expected cost of better coverage.
-
-Run [`examples/04_recalibration.py`](examples/04_recalibration.py) to reproduce these results.
+Run [`examples/04_recalibration.py`](examples/04_recalibration.py) to reproduce.
 
 ---
 
 ## Walk-forward backtest
 
-Expanding-window monthly re-training over March–December 2023. For each test month *m*:
-
-1. Train the GBM forecaster on hours 168 … *start\_of(m)* — strictly no look-ahead.
-2. Produce 24h-ahead p10/p50/p90 forecasts for month *m*.
-3. Naive persistence baseline: price\[*t*−24\] (same hour yesterday).
-4. Run three MILP optimisations (8 MWh / 2 MW / η = 0.92 / SoC₀ = 0.5), all **evaluated on actual prices**: perfect foresight, GBM p50, persistence.
-
-### Data split
-
-| Segment | Hours | Period | Purpose |
-|---|---|---|---|
-| Train (expanding) | 168 → *start\_of(m)* | Jan–*prev. month* | Fit GBM models |
-| Test | *start\_of(m)* → *end\_of(m)* | Month *m* | Evaluate forecast + dispatch |
-| First test month | 1 416 | March | GBM trained on Jan–Feb only |
-| Last test month | 8 016 | December | GBM trained on Jan–Nov |
+Expanding-window monthly re-training, March–December 2023. GBM trained on all hours before each test month; persistence baseline is price[*t*−24]. All three strategies (perfect foresight, GBM p50, persistence) are **evaluated on actual prices**.
 
 ![Walk-forward backtest](docs/images/backtest_monthly.png)
 
-Run [`examples/05_backtest.py`](examples/05_backtest.py) to reproduce.
-
-### Forecast quality (GBM p50 vs actuals) — Mar–Dec 2023
-
-All metrics in €/MWh except coverage (%). Overall row weighted by month length.
-
-| Month | MAE | RMSE | p90 cov% | 80% cov% | CRPS | MAE pers | RMSE pers |
+| | MAE | RMSE | p90 cov% | 80% cov% | CRPS | MAE pers | RMSE pers |
 |---|---|---|---|---|---|---|---|
-| Mar | 31.6 | 44.6 | 88.4 | 50.5 | 25.09 | 26.7 | 40.8 |
-| Apr | 21.6 | 30.2 | 89.3 | 61.3 | 15.34 | 24.8 | 35.3 |
-| May | 28.4 | 38.7 | 78.1 | 46.5 | 21.49 | 26.5 | 37.6 |
-| Jun | 18.7 | 26.6 | 91.4 | 80.4 | 12.00 | 20.6 | 29.1 |
-| Jul | 16.1 | 22.6 | 90.7 | 70.8 | 10.65 | 20.8 | 30.2 |
-| Aug | 14.2 | 21.1 | 83.9 | 75.0 | 9.27 | 19.2 | 29.1 |
-| Sep | 22.5 | 30.6 | 80.4 | 56.5 | 14.94 | 24.0 | 33.6 |
-| Oct | 25.8 | 35.1 | 81.0 | 57.3 | 17.96 | 31.3 | 41.6 |
-| Nov | 23.5 | 30.4 | 73.6 | 56.4 | 15.63 | 25.2 | 33.5 |
-| Dec | 25.5 | 34.0 | 91.8 | 63.7 | 16.61 | 25.7 | 34.7 |
-| **Overall** | **22.8** | **32.1** | **84.9** | **61.8** | **15.92** | **24.5** | **34.8** |
+| **Overall (Mar–Dec)** | **22.8** | **32.1** | **84.9** | **61.8** | **15.92** | **24.5** | **34.8** |
 
-### Economic results (revenue evaluated on actual prices) — Mar–Dec 2023
-
-| Month | PF revenue | GBM revenue | Pers revenue | Capture GBM | Capture pers |
+| | PF revenue | GBM revenue | Pers revenue | Capture GBM | Capture pers |
 |---|---|---|---|---|---|
-| Mar | €27,353 | €21,754 | €24,408 | 79.5% | 89.2% |
-| Apr | €29,514 | €27,015 | €27,537 | 91.5% | 93.3% |
-| May | €33,879 | €30,562 | €30,310 | 90.2% | 89.5% |
-| Jun | €28,047 | €25,984 | €24,906 | 92.6% | 88.8% |
-| Jul | €30,119 | €28,331 | €26,709 | 94.1% | 88.7% |
-| Aug | €28,255 | €26,505 | €25,715 | 93.8% | 91.0% |
-| Sep | €28,287 | €25,808 | €25,303 | 91.2% | 89.5% |
-| Oct | €26,223 | €22,247 | €21,929 | 84.8% | 83.6% |
-| Nov | €16,939 | €12,921 | €13,291 | 76.3% | 78.5% |
-| Dec | €13,078 | €9,465 | €9,426 | 72.4% | 72.1% |
-| **Overall** | **€261,695** | **€230,592** | **€229,535** | **88.1%** | **87.7%** |
+| **Overall (Mar–Dec)** | **€261,695** | **€230,592** | **€229,535** | **88.1%** | **87.7%** |
 
-### Diebold–Mariano test (GBM p50 vs persistence, Mar–Dec, *n* = 306 days)
+**Diebold–Mariano** (GBM p50 vs persistence, *n* = 306 days, one-sided H₁: GBM lower loss):
 
-H₁: GBM has lower expected loss than persistence (one-sided). Daily loss differentials, Newey–West lag = 1, HLN small-sample correction.
-
-| Metric | Abs loss | Sq loss |
+| | Abs loss | Sq loss |
 |---|---|---|
 | Mean loss — persistence | 24.475 €/MWh | 1 213.8 (€/MWh)² |
 | Mean loss — GBM p50 | 22.815 €/MWh | 1 032.3 (€/MWh)² |
-| DM statistic | 2.163 | 2.646 |
-| *p*-value (normal) | 0.015 | 0.004 |
 | HLN statistic | 2.160 | 2.642 |
 | *p*-value (HLN, *t*₃₀₅) | 0.016 | 0.004 |
 
-### Interpretation
-
-GBM is significantly more accurate than persistence in point-forecast terms — DM *p* = 0.016 (abs) and 0.004 (sq) with the HLN correction. After fixing the rolling-feature look-ahead, the DM statistics are lower than before (2.16 / 2.64 vs. previously 3.74 / 4.71), but remain significant at the 5% level. Unlike the original version, the forecast accuracy advantage now translates to a small revenue edge: GBM (88.1%) marginally outperforms persistence (87.7%) overall, winning 7 of 10 months. March remains the weakest month (GBM 79.5% vs persistence 89.2%): with only ~1 250 training samples the model mis-forecasts the seasonal price structure. GBM's 80% interval coverage averages 61.8%, well short of the 80% target; p90 coverage (84.9%) also falls below 90%.
+GBM is significantly more accurate than persistence (DM *p* = 0.016 abs, 0.004 sq) and marginally wins on revenue capture overall (88.1% vs 87.7%, 7 of 10 months). March is the weakest month (79.5% GBM vs 89.2% persistence) due to sparse training data (~1 250 samples). 80% interval coverage averages 61.8% and p90 coverage 84.9%, both below their targets.
 
 **Limitations:** monthly (not daily) re-training; single year of data (2023).
+
+Run [`examples/05_backtest.py`](examples/05_backtest.py) to reproduce.
 
 ---
 
 ## Robustness and fallback
 
-Evaluates how plausibility checks, missing-data imputation, and a GBM confidence fallback affect revenue when price inputs are faulty. Single seed (42), monthly MILP planning horizon (one optimisation per month), no re-forecasting within the month.
+Tests how plausibility checks, imputation, and a confidence fallback protect revenue under faulty price inputs. Single seed (42).
 
-### Setup
+**Fault injection — scenario S1** (Mar–Dec only): 376 NaN hours (5.1%), 255 spike hours (3.5%), 201 stuck-value hours (2.7%); 762 total imputed (10.4%).
 
-**Fault injection — scenario S1** (test-period hours 1416–8760 only):
-
-| Fault type | Hours injected | Share of test period |
-|---|---|---|
-| Missing (NaN blocks 2–24 h) | 376 | 5.1 % |
-| Spikes (value × 10) | 255 | 3.5 % |
-| Stuck values (runs 6–12 h) | 201 | 2.7 % |
-| Total imputed after cleaning | 762 | 10.4 % |
-
-**Strategies:**
-
-| Label | Description |
-|---|---|
-| A | GBM, no checks — naive forward-fill of NaN, no fallback |
-| B | GBM + check-and-flag + imputation + day-level confidence/imputation fallback |
-| C | Persistence (cleaned price[*t*−24]) — checks + imputation, no GBM |
-| D | Perfect foresight (actual prices) — benchmark |
-
-Fallback threshold *k* = 1.25, calibrated on Jan–Feb data only. Strategy D is scenario-independent (actual prices are always clean).
+**Strategies:** A = GBM no checks · B = GBM + checks + imputation + fallback · C = persistence + checks · D = perfect foresight.
 
 ![Robustness evaluation](docs/images/robustness.png)
 
+| Scenario | A cap% | B cap% | B fallback% | C cap% |
+|---|---|---|---|---|
+| S0 — clean | 88.1 | 88.1 | 8.5 | 87.2 |
+| S1 — faulty | 83.5 | 85.6 | 43.1 | 85.3 |
+
+On clean data the three strategies are close. On faulty data the robustness layer (B) recovers 2.1 pp over raw GBM (A) by switching ~43% of days to cleaned persistence; cleaned persistence alone (C, 85.3%) is comparable. The S0→S1 degradation for raw GBM (88.1% → 83.5%) is modest compared to the original results — much of the previously reported drop was artefact of the look-ahead leak.
+
+**Limitations:** single fault seed; monthly planning horizon; no intra-month re-forecasting.
+
 Run [`examples/06_robustness.py`](examples/06_robustness.py) to reproduce.
-
-### Revenue capture (% of perfect foresight) — Mar–Dec 2023
-
-**Scenario S0 — clean inputs**
-
-| Month | N-h | PF rev (€) | A cap% | A MAE | B cap% | B MAE | B fb% | C cap% | C MAE |
-|---|---|---|---|---|---|---|---|---|---|
-| Mar | 744 | 27 353 | 79.5 | 31.6 | 80.1 | 31.2 | 3.2 | 85.1 | 27.3 |
-| Apr | 720 | 29 514 | 91.5 | 21.6 | 93.5 | 20.7 | 23.3 | 93.2 | 24.4 |
-| May | 744 | 33 879 | 90.2 | 28.4 | 89.3 | 27.6 | 12.9 | 88.8 | 26.5 |
-| Jun | 720 | 28 047 | 92.6 | 18.7 | 92.4 | 18.6 | 3.3 | 88.8 | 20.6 |
-| Jul | 744 | 30 119 | 94.1 | 16.1 | 94.1 | 16.1 | 0.0 | 88.7 | 20.8 |
-| Aug | 744 | 28 255 | 93.8 | 14.2 | 93.4 | 15.6 | 9.7 | 91.0 | 19.1 |
-| Sep | 720 | 28 287 | 91.2 | 22.5 | 91.2 | 22.5 | 0.0 | 89.4 | 23.5 |
-| Oct | 744 | 26 223 | 84.8 | 25.8 | 84.3 | 25.7 | 3.2 | 83.6 | 31.2 |
-| Nov | 720 | 16 939 | 76.3 | 23.5 | 76.3 | 23.5 | 0.0 | 78.3 | 25.2 |
-| Dec | 744 | 13 078 | 72.4 | 25.5 | 70.8 | 22.1 | 29.0 | 72.9 | 25.3 |
-| **Overall** | **7 344** | **261 695** | **88.1** | **22.8** | **88.1** | **22.4** | **8.5** | **87.2** | **24.4** |
-
-**Scenario S1 — faulty inputs (seed=42)**
-
-| Month | N-h | NaN | Spk | Stk | Imp | A cap% | A MAE | B cap% | B MAE | B fb% | C cap% | C MAE |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Mar | 744 | 41 | 28 | 18 | 87 | 78.1 | 31.3 | 77.7 | 30.7 | 41.9 | 80.1 | 27.9 |
-| Apr | 720 | 38 | 47 | 34 | 114 | 90.5 | 23.3 | 91.8 | 24.8 | 66.7 | 93.1 | 25.1 |
-| May | 744 | 12 | 25 | 23 | 56 | 84.2 | 32.1 | 87.8 | 26.6 | 45.2 | 89.7 | 26.3 |
-| Jun | 720 | 31 | 14 | 9 | 45 | 90.6 | 20.6 | 91.9 | 18.5 | 26.7 | 88.8 | 20.1 |
-| Jul | 744 | 62 | 17 | 24 | 92 | 86.7 | 20.7 | 90.2 | 19.7 | 48.4 | 86.6 | 22.6 |
-| Aug | 744 | 4 | 23 | 10 | 31 | 91.5 | 15.0 | 92.7 | 15.7 | 19.4 | 90.1 | 19.3 |
-| Sep | 720 | 49 | 27 | 26 | 97 | 88.9 | 24.3 | 85.8 | 23.3 | 40.0 | 85.3 | 24.5 |
-| Oct | 744 | 61 | 43 | 49 | 122 | 76.8 | 29.0 | 82.5 | 29.9 | 64.5 | 84.5 | 32.1 |
-| Nov | 720 | 55 | 8 | 8 | 76 | 63.6 | 25.6 | 73.6 | 24.9 | 53.3 | 70.9 | 27.3 |
-| Dec | 744 | 23 | 23 | 0 | 42 | 64.4 | 26.2 | 64.3 | 24.7 | 25.8 | 67.0 | 26.7 |
-| **Overall** | **7 344** | **376** | **255** | **201** | **762** | **83.5** | **24.8** | **85.6** | **23.9** | **43.1** | **85.3** | **25.2** |
-
-### Interpretation
-
-On clean data (S0) A (88.1%), B (88.1%), and C (87.2%) are close, with GBM and GBM+fallback marginally leading persistence — consistent with the backtest result after the look-ahead fix. The fallback threshold is now less aggressive (k=2.00, fb%=8.5%), so B rarely switches away from GBM on clean data. On faulty data (S1) the checks and imputation matter: raw GBM (A) drops to 83.5% as corrupt lag features degrade the forecast, while the robustness layer (B) recovers to 85.6% by switching ~43% of days to cleaned persistence. Cleaned persistence alone (C, 85.3%) is close to B but no longer clearly superior, and raw GBM (A) on S1 is now much closer to its S0 level than before — a sign that the previously reported large S0→S1 degradation was partly artefact of the look-ahead leak rather than fault sensitivity.
-
-**Limitations:** single fault seed; monthly (not daily) planning horizon; no intra-month re-forecasting.
 
 ---
 
 ## Correction (Oct 2026)
 
-The rolling-feature window in `_make_features` originally used `prices[t-24:t]`, which included same-day hours up to (but not including) *t*. For a day-ahead bid placed at noon on day D−1, those same-day prices are not yet known, so this was a look-ahead leak. The fix uses `prices[day_start-24:day_start]` — the previous complete day's prices only. In addition, `model_p50` was changed from squared-error loss (which estimates the mean) to quantile loss at α=0.50 (the true median), and per-hour quantile ordering (p10 ≤ p50 ≤ p90) is now enforced in `forecast_prices`. Across the Mar–Dec walk-forward backtest, the leak had inflated the apparent point-forecast accuracy while simultaneously harming revenue capture: after the fix, MAE rose from 21.3 to 22.8 EUR/MWh overall, but GBM revenue capture improved from 80.9% to 88.1% (nearly matching persistence at 87.7%), because the corrected model no longer learns spurious intra-day correlations that mislead the dispatch optimiser.
+The rolling-feature window in `_make_features` originally used `prices[t-24:t]`, which included same-day hours not yet known at bid time (noon on day D−1). The fix uses `prices[day_start-24:day_start]` — the previous complete day only. `model_p50` was also corrected from squared-error loss (mean) to quantile loss at α=0.50 (true median), and per-hour quantile ordering (p10 ≤ p50 ≤ p90) is now enforced. After the fix, MAE rose from 21.3 to 22.8 EUR/MWh but GBM revenue capture improved from 80.9% to 88.1%, because the corrected model no longer learns spurious intra-day correlations that misled the dispatch optimiser.
 
 ---
 
@@ -282,24 +172,15 @@ $$\max \sum_{t=1}^{8760} \lambda_t \left( \text{discharge}_t \cdot \sqrt{\eta} -
 
 ### Peak shaving
 
-**Additional variable:**
-
-| Variable | Domain | Meaning |
-|---|---|---|
-| `peak` | ℝ≥0 | Maximum grid import across all hours |
-
 $$\min \; \text{peak} \quad \text{subject to} \quad \text{peak} \geq D_t + \text{charge}_t - \text{discharge}_t \quad \forall t$$
-
-where $D_t$ is the industrial electricity demand at hour *t*.
 
 ### Key constraints (both modes)
 
 ```
-soc[t]  =  soc[t-1]  +  charge[t-1]·√η  −  discharge[t-1]/√η     (dynamics)
-0       ≤  soc[t]    ≤  cap                                         (capacity)
-soc[0]  =  soc₀ · cap                                              (initial SoC)
-soc[T]  ≥  0.5 · cap                                               (terminal SoC)
-charge[t]    ≤  M · is_charging[t]                                  (mutex — Big-M)
+soc[t]  =  soc[t-1]  +  charge[t-1]·√η  −  discharge[t-1]/√η
+0       ≤  soc[t]    ≤  cap
+soc[T]  ≥  0.5 · cap
+charge[t]    ≤  M · is_charging[t]          (mutex — Big-M)
 discharge[t] ≤  M · (1 − is_charging[t])
 ```
 
@@ -323,11 +204,7 @@ pip install highspy   # recommended solver
 ```python
 from bess_arbitrage import optimize_bess_arbitrage
 
-result = optimize_bess_arbitrage(
-    battery_capacity_mwh=8.0,
-    max_power_mw=2.0,
-    efficiency=0.92,
-)
+result = optimize_bess_arbitrage(battery_capacity_mwh=8.0, max_power_mw=2.0, efficiency=0.92)
 print(f"Annual revenue : €{result['kpis']['annual_revenue_eur']:,.0f}")
 print(f"Annual cycles  : {result['kpis']['annual_cycles']}")
 ```
@@ -339,10 +216,7 @@ from bess_arbitrage import optimize_peak_shaving, make_industrial_load
 
 load = make_industrial_load(peak_mw=2.2, base_mw=0.4)
 result = optimize_peak_shaving(load, battery_capacity_mwh=8.0, max_power_mw=2.0)
-
-print(f"Peak without BESS : {result['peak_without_mw']:.2f} MW")
-print(f"Peak with BESS    : {result['peak_with_mw']:.2f} MW")
-print(f"Reduction         : {result['peak_reduction_pct']:.1f}%")
+print(f"Peak reduction : {result['peak_reduction_pct']:.1f}%")
 ```
 
 ### Price forecasting with calibration
@@ -352,13 +226,9 @@ from bess_arbitrage import train_price_forecaster, forecast_prices
 import numpy as np
 
 prices = ...  # np.ndarray, 8760 hourly prices
-
 models = train_price_forecaster(prices, train_end_h=5832)
 point, lower, upper = forecast_prices(models, prices, start_h=5832, end_h=8760)
-
-# Empirical calibration check
-actuals = prices[5832:8760]
-print(f"p90 coverage: {np.mean(actuals <= upper) * 100:.1f}%  (target 90%)")
+print(f"p90 coverage: {np.mean(prices[5832:] <= upper) * 100:.1f}%  (target 90%)")
 ```
 
 See [`examples/`](examples/) for complete scripts.
@@ -389,10 +259,6 @@ See [`examples/`](examples/) for complete scripts.
 | `efficiency` | `float` | `0.92` | Round-trip efficiency (0–1) |
 
 **Returns** `peak_without_mw`, `peak_with_mw`, `peak_reduction_pct`, and hourly `schedule`.
-
-### `make_industrial_load(peak_mw, base_mw, seed) → np.ndarray`
-
-Generates a synthetic 8,760-hour industrial load profile with day/night, weekday/weekend, and Gaussian noise.
 
 ### `train_price_forecaster(prices, train_end_h, n_estimators) → tuple`
 
